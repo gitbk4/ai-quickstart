@@ -1,0 +1,480 @@
+version: 1
+description: "LLM eval for persona heal prose quality."
+# Judge model: Anthropic's smallest current model. Each case feeds the heal
+# context blob (current_persona + anecdotes + activity_summary) into the heal
+# synthesis step, captures the new prose + frontmatter, and asks the judge
+# whether each expectation holds. Pass threshold is the fraction of
+# expectations that must score >= 0.8 across ALL cases.
+judge_model: claude-haiku
+pass_threshold: 0.8
+
+# Notes for the harness implementer:
+#   * `input.current_persona` is the parsed frontmatter dict (PLAN.md schema).
+#   * `input.anecdotes` is a list of {slug, content} mirroring heal.cmd_prepare_context's output.
+#   * `input.activity_summary` mirrors the activity-summary.json shape.
+#   * The harness should run heal's synthesis (LLM rewrite step) with this input,
+#     then evaluate the resulting `prose` + `frontmatter` against `expectations`.
+#   * `expectations` are natural-language assertions for the judge model.
+
+cases:
+  # ------------------------------------------------------------------
+  # Archetype: job — single project, single anecdote.
+  # ------------------------------------------------------------------
+  - name: "job-single-archetype-single-anecdote"
+    input:
+      current_persona:
+        identity:
+          role: "ML engineer"
+          industry: "fintech"
+          archetype: "job"
+        goals:
+          top_problems: ["onboarding chaos for new ML engineers"]
+          desired_outcomes: ["build a 30-day ramp playbook"]
+        preferences:
+          project_style: "minimal"
+          coding_languages: ["python"]
+          skill_tolerance: "permissive"
+        activity:
+          project_count: 1
+          total_skill_uses: 3
+          top_projects: ["ramp-playbook"]
+          last_active: "2026-04-29T10:00:00Z"
+        generated:
+          updated_at: "2026-04-29T10:00:00Z"
+          anecdote_count: 1
+          version: 2
+      anecdotes:
+        - slug: "ramp-playbook"
+          content: |
+            # Anecdotes: ramp-playbook
+
+            ## 2026-04-29T09:30:00Z
+
+            Drafted the first week of the ramp. Used compathy to scaffold the
+            wiki and ai-quickstart to suggest related skills.
+      activity_summary:
+        weeks: {}
+        generated_at: "2026-04-29T00:00:00Z"
+    expectations:
+      - "prose mentions the user's role (ML engineer) or seniority context"
+      - "prose stays under 400 words"
+      - "prose does not invent a project that is not in anecdotes"
+      - "prose preserves at least one stated goal from current_persona.goals.top_problems"
+      - "frontmatter.activity.project_count is 1 and matches the anecdotes count"
+      - "prose references the ramp-playbook project by name"
+
+  # ------------------------------------------------------------------
+  # Archetype: personal — many anecdotes, weekend hobby tone.
+  # ------------------------------------------------------------------
+  - name: "personal-many-anecdotes"
+    input:
+      current_persona:
+        identity:
+          role: "weekend hacker"
+          industry: ""
+          archetype: "personal"
+        goals:
+          top_problems: ["track my running training plan"]
+          desired_outcomes: ["a small CLI that nags me on rest days"]
+        preferences:
+          project_style: "minimal"
+          coding_languages: ["python", "rust"]
+          skill_tolerance: "strict"
+        activity:
+          project_count: 4
+          total_skill_uses: 22
+          top_projects: ["nag-cli", "run-tracker", "garmin-sync", "weekly-review"]
+          last_active: "2026-04-28T22:00:00Z"
+        generated:
+          updated_at: "2026-04-28T22:00:00Z"
+          anecdote_count: 4
+          version: 5
+      anecdotes:
+        - slug: "nag-cli"
+          content: "Built rest-day nagger. compathy ingested README."
+        - slug: "run-tracker"
+          content: "Stored splits in sqlite. Added ai-quickstart skill suggestions."
+        - slug: "garmin-sync"
+          content: "FIT-file parser in rust. Pulled from Garmin Connect."
+        - slug: "weekly-review"
+          content: "Markdown weekly review template. Used prompts skill."
+      activity_summary:
+        weeks:
+          "2026-16":
+            project_counts: {nag-cli: 5, run-tracker: 8}
+            top_skills: [{name: compathy, count: 4}]
+            durations: {total_seconds: 0, event_count: 13}
+        generated_at: "2026-04-22T00:00:00Z"
+    expectations:
+      - "prose treats the user as a hobbyist rather than a professional"
+      - "prose mentions multiple anecdote project slugs (e.g., nag-cli, run-tracker)"
+      - "prose preserves the rest-day-nagging goal"
+      - "prose stays under 400 words"
+      - "prose does not invent a project not present in anecdotes"
+      - "frontmatter.activity.top_projects is a subset of the anecdote slugs"
+
+  # ------------------------------------------------------------------
+  # Archetype: exploring — zero anecdotes, fresh user.
+  # ------------------------------------------------------------------
+  - name: "exploring-zero-anecdotes"
+    input:
+      current_persona:
+        identity:
+          role: ""
+          industry: ""
+          archetype: "exploring"
+        goals:
+          top_problems: ["not sure where to start with AI projects"]
+          desired_outcomes: ["pick a first project"]
+        preferences:
+          project_style: "minimal"
+          coding_languages: []
+          skill_tolerance: "permissive"
+        activity:
+          project_count: 0
+          total_skill_uses: 0
+          top_projects: []
+          last_active: "2026-04-29T08:00:00Z"
+        generated:
+          updated_at: "2026-04-29T08:00:00Z"
+          anecdote_count: 0
+          version: 1
+      anecdotes: []
+      activity_summary: {}
+    expectations:
+      - "prose acknowledges the user is exploring and has not picked a project yet"
+      - "prose does not invent any project name"
+      - "prose stays under 400 words"
+      - "prose preserves the 'not sure where to start' goal"
+      - "frontmatter.activity.project_count is 0"
+      - "frontmatter.activity.top_projects is an empty list"
+
+  # ------------------------------------------------------------------
+  # Drift detection: anecdotes contradict each other.
+  # ------------------------------------------------------------------
+  - name: "contradictory-anecdotes-no-hallucination"
+    input:
+      current_persona:
+        identity:
+          role: "founder"
+          industry: "saas"
+          archetype: "job"
+        goals:
+          top_problems: ["nail product positioning"]
+          desired_outcomes: ["a one-line pitch"]
+        preferences:
+          project_style: "full"
+          coding_languages: ["typescript"]
+          skill_tolerance: "permissive"
+        activity:
+          project_count: 2
+          total_skill_uses: 6
+          top_projects: ["positioning-doc", "pitch-deck"]
+          last_active: "2026-04-29T09:00:00Z"
+        generated:
+          updated_at: "2026-04-29T09:00:00Z"
+          anecdote_count: 2
+          version: 3
+      anecdotes:
+        - slug: "positioning-doc"
+          content: "Decided to target enterprise."
+        - slug: "pitch-deck"
+          content: "Pitched for SMB only. Walked away from enterprise."
+      activity_summary: {}
+    expectations:
+      - "prose acknowledges the contradiction or does not assert one stance over the other"
+      - "prose does not invent a third audience segment beyond enterprise/SMB"
+      - "prose stays under 400 words"
+      - "prose preserves the positioning goal"
+
+  # ------------------------------------------------------------------
+  # Drift detection: persona facts must not be silently dropped.
+  # ------------------------------------------------------------------
+  - name: "preserves-stated-facts-from-current-persona"
+    input:
+      current_persona:
+        identity:
+          role: "site reliability engineer"
+          industry: "healthtech"
+          archetype: "job"
+        goals:
+          top_problems:
+            - "reduce on-call burnout"
+            - "automate post-incident review"
+          desired_outcomes:
+            - "ship a weekly digest of incidents"
+            - "cut MTTR by 30 percent"
+        preferences:
+          project_style: "minimal"
+          coding_languages: ["python", "go"]
+          skill_tolerance: "strict"
+        activity:
+          project_count: 2
+          total_skill_uses: 11
+          top_projects: ["oncall-digest", "incident-bot"]
+          last_active: "2026-04-29T07:30:00Z"
+        generated:
+          updated_at: "2026-04-29T07:30:00Z"
+          anecdote_count: 2
+          version: 4
+      anecdotes:
+        - slug: "oncall-digest"
+          content: "Used compathy to ingest postmortems."
+        - slug: "incident-bot"
+          content: "Slack bot prototype with the prompts skill."
+      activity_summary:
+        weeks:
+          "2026-17":
+            project_counts: {oncall-digest: 4, incident-bot: 7}
+            top_skills: [{name: prompts, count: 3}]
+            durations: {total_seconds: 0, event_count: 11}
+        generated_at: "2026-04-29T00:00:00Z"
+    expectations:
+      - "prose preserves both top_problems (on-call burnout, post-incident review)"
+      - "prose preserves at least one desired_outcome (weekly digest or MTTR target)"
+      - "prose does not invent a project not in anecdotes"
+      - "prose stays under 400 words"
+      - "frontmatter.identity.industry remains 'healthtech'"
+
+  # ------------------------------------------------------------------
+  # Drift detection: do not invent skills.
+  # ------------------------------------------------------------------
+  - name: "no-hallucinated-skills"
+    input:
+      current_persona:
+        identity:
+          role: "indie developer"
+          industry: ""
+          archetype: "personal"
+        goals:
+          top_problems: ["ship faster"]
+          desired_outcomes: ["one feature per week"]
+        preferences:
+          project_style: "minimal"
+          coding_languages: ["typescript"]
+          skill_tolerance: "permissive"
+        activity:
+          project_count: 1
+          total_skill_uses: 2
+          top_projects: ["sidequest"]
+          last_active: "2026-04-29T11:00:00Z"
+        generated:
+          updated_at: "2026-04-29T11:00:00Z"
+          anecdote_count: 1
+          version: 2
+      anecdotes:
+        - slug: "sidequest"
+          content: "Used compathy and ai-quickstart only."
+      activity_summary:
+        weeks:
+          "2026-17":
+            project_counts: {sidequest: 2}
+            top_skills:
+              - {name: compathy, count: 1}
+              - {name: ai-quickstart, count: 1}
+            durations: {total_seconds: 0, event_count: 2}
+        generated_at: "2026-04-29T00:00:00Z"
+    expectations:
+      - "prose only mentions skills present in activity_summary or anecdotes (compathy, ai-quickstart)"
+      - "prose does not invent fictional Claude skills"
+      - "prose stays under 400 words"
+
+  # ------------------------------------------------------------------
+  # Edge case: very long anecdote content (truncation discipline).
+  # ------------------------------------------------------------------
+  - name: "long-anecdote-truncation-discipline"
+    input:
+      current_persona:
+        identity:
+          role: "research engineer"
+          industry: "ai-research"
+          archetype: "job"
+        goals:
+          top_problems: ["track open research questions"]
+          desired_outcomes: ["a daily research log"]
+        preferences:
+          project_style: "full"
+          coding_languages: ["python"]
+          skill_tolerance: "strict"
+        activity:
+          project_count: 1
+          total_skill_uses: 14
+          top_projects: ["research-log"]
+          last_active: "2026-04-29T16:00:00Z"
+        generated:
+          updated_at: "2026-04-29T16:00:00Z"
+          anecdote_count: 1
+          version: 3
+      anecdotes:
+        - slug: "research-log"
+          content: |
+            Long entry covering: paper triage, open questions on RLHF
+            scaling, ablation results from last week's run, todo list of
+            replication targets, links to Anthropic posts, notes from a
+            reading group, planned experiments for next week, and a
+            scratchpad of half-formed ideas about reward model
+            calibration. Repeated across many days, this anecdote contains
+            a lot of raw material — heal must summarize, not echo.
+      activity_summary: {}
+    expectations:
+      - "prose summarizes the anecdote rather than copying it verbatim"
+      - "prose stays under 400 words"
+      - "prose preserves the daily research log goal"
+
+  # ------------------------------------------------------------------
+  # Edge case: archetype change between versions (stale persona).
+  # ------------------------------------------------------------------
+  - name: "archetype-shift-respected"
+    input:
+      current_persona:
+        identity:
+          role: "former PM, now coding again"
+          industry: "consumer"
+          archetype: "personal"
+        goals:
+          top_problems: ["rebuild eng skills"]
+          desired_outcomes: ["land a senior IC role"]
+        preferences:
+          project_style: "minimal"
+          coding_languages: ["python"]
+          skill_tolerance: "permissive"
+        activity:
+          project_count: 2
+          total_skill_uses: 9
+          top_projects: ["weekend-cli", "blog-engine"]
+          last_active: "2026-04-28T19:00:00Z"
+        generated:
+          updated_at: "2026-04-28T19:00:00Z"
+          anecdote_count: 2
+          version: 4
+      anecdotes:
+        - slug: "weekend-cli"
+          content: "Argparse practice."
+        - slug: "blog-engine"
+          content: "Static site generator from scratch."
+      activity_summary: {}
+    expectations:
+      - "prose reflects the personal archetype (hobby/learning tone), not job"
+      - "prose preserves the eng-skills rebuilding goal"
+      - "prose does not invent a current employer"
+      - "prose stays under 400 words"
+
+  # ------------------------------------------------------------------
+  # Activity-summary-only case: no fresh anecdotes, summary present.
+  # ------------------------------------------------------------------
+  - name: "activity-summary-without-fresh-anecdotes"
+    input:
+      current_persona:
+        identity:
+          role: "platform engineer"
+          industry: "logistics"
+          archetype: "job"
+        goals:
+          top_problems: ["reduce deploy friction"]
+          desired_outcomes: ["push-button rollback"]
+        preferences:
+          project_style: "full"
+          coding_languages: ["go", "python"]
+          skill_tolerance: "strict"
+        activity:
+          project_count: 3
+          total_skill_uses: 27
+          top_projects: ["deploy-guard", "rollback-cli", "release-dash"]
+          last_active: "2026-04-22T15:00:00Z"
+        generated:
+          updated_at: "2026-04-22T15:00:00Z"
+          anecdote_count: 3
+          version: 6
+      anecdotes: []
+      activity_summary:
+        weeks:
+          "2026-16":
+            project_counts: {deploy-guard: 12, rollback-cli: 8, release-dash: 7}
+            top_skills:
+              - {name: compathy, count: 9}
+              - {name: ai-quickstart, count: 5}
+            durations: {total_seconds: 14400, event_count: 27}
+        generated_at: "2026-04-22T00:00:00Z"
+    expectations:
+      - "prose summarizes activity from activity_summary even with no anecdotes"
+      - "prose mentions at least one project from top_projects"
+      - "prose stays under 400 words"
+      - "prose preserves the deploy-friction goal"
+
+  # ------------------------------------------------------------------
+  # Schema discipline: frontmatter fields must round-trip.
+  # ------------------------------------------------------------------
+  - name: "frontmatter-roundtrip-discipline"
+    input:
+      current_persona:
+        identity:
+          role: "data scientist"
+          industry: "biotech"
+          archetype: "job"
+        goals:
+          top_problems: ["clean lab data faster"]
+          desired_outcomes: ["a notebook template that lints data quality"]
+        preferences:
+          project_style: "minimal"
+          coding_languages: ["python", "r"]
+          skill_tolerance: "strict"
+        activity:
+          project_count: 1
+          total_skill_uses: 4
+          top_projects: ["data-lint"]
+          last_active: "2026-04-29T13:00:00Z"
+        generated:
+          updated_at: "2026-04-29T13:00:00Z"
+          anecdote_count: 1
+          version: 2
+      anecdotes:
+        - slug: "data-lint"
+          content: "First pass at the linter."
+      activity_summary: {}
+    expectations:
+      - "frontmatter.identity.archetype is one of job|personal|exploring"
+      - "frontmatter.preferences.project_style is one of minimal|full"
+      - "frontmatter.preferences.skill_tolerance is one of strict|permissive"
+      - "frontmatter.generated.version is greater than the input version"
+      - "frontmatter.generated.updated_at is later than the input updated_at"
+      - "prose stays under 400 words"
+
+  # ------------------------------------------------------------------
+  # Edge case: anecdote count vs frontmatter count drift.
+  # ------------------------------------------------------------------
+  - name: "anecdote-count-realigned"
+    input:
+      current_persona:
+        identity:
+          role: "tech lead"
+          industry: "edtech"
+          archetype: "job"
+        goals:
+          top_problems: ["unblock my team"]
+          desired_outcomes: ["fewer interrupts per day"]
+        preferences:
+          project_style: "minimal"
+          coding_languages: ["typescript"]
+          skill_tolerance: "permissive"
+        activity:
+          project_count: 1
+          total_skill_uses: 3
+          top_projects: ["interrupt-log"]
+          last_active: "2026-04-29T15:00:00Z"
+        generated:
+          updated_at: "2026-04-29T15:00:00Z"
+          anecdote_count: 1
+          version: 2
+      anecdotes:
+        - slug: "interrupt-log"
+          content: "Logging Slack pings."
+        - slug: "weekly-1on1"
+          content: "Template for 1:1 notes."
+        - slug: "blocker-radar"
+          content: "Tracking team blockers."
+      activity_summary: {}
+    expectations:
+      - "frontmatter.generated.anecdote_count is 3 (matches anecdotes list length)"
+      - "prose mentions at least one of the new anecdote slugs (weekly-1on1 or blocker-radar)"
+      - "prose preserves the team-unblocking goal"
+      - "prose stays under 400 words"
