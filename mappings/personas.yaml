@@ -1,0 +1,98 @@
+# ai-quickstart curated persona -> suggestion mapping.
+#
+# Schema:
+#   schema_version: int (required, currently 1)
+#   archetypes:
+#     <archetype>:                     # job | personal | exploring
+#       industry-<slug> | default:
+#         project_templates: [str, ...]
+#         claude_skills:
+#           - name: str                # required
+#             description: str         # short blurb shown to user
+#             github: "owner/repo"     # optional; enables GitHub freshness
+#             mcpmarket_search: str    # optional; enables mcpmarket lookup
+#         mcp_servers:
+#           - id: str                  # registry id used to match in MCP registry
+#             description: str
+#             search_keywords: [str]   # keywords passed to MCP registry search
+#
+# Curation rules:
+#   - Only reference repos that actually exist on GitHub. We are intentionally
+#     conservative here so a fresh Step 2 run does not 404 on every entry.
+#   - Each archetype has at least one industry block plus a default fallback
+#     when it makes sense. ``exploring`` and ``personal`` lean on default
+#     because the industry signal is weak for those archetypes.
+#   - Keep lists short. Step 2's adversarial framing already pushes for
+#     fewer-better suggestions; long curated lists fight that.
+
+schema_version: 1
+archetypes:
+  job:
+    industry-marketing:
+      project_templates: [content-research, audience-personas]
+      claude_skills:
+        - name: research-assistant
+          description: "Research and summarize web sources for content briefs"
+          github: anthropics/anthropic-cookbook
+          mcpmarket_search: "research"
+        - name: courses-curriculum
+          description: "Curriculum patterns adaptable to content roadmaps"
+          github: anthropics/courses
+      mcp_servers:
+        - id: brave-search
+          description: "Web search via Brave"
+          search_keywords: [search, web, brave]
+        - id: fetch
+          description: "Fetch and parse arbitrary URLs"
+          search_keywords: [fetch, http, url]
+    industry-engineering:
+      project_templates: [code-review-bot, doc-generator]
+      claude_skills:
+        - name: claude-code-reference
+          description: "Reference patterns from the Claude Code repo"
+          github: anthropics/claude-code
+        - name: mcp-server-examples
+          description: "Reference MCP servers in many languages"
+          github: modelcontextprotocol/servers
+      mcp_servers:
+        - id: github
+          description: "GitHub repo + issues + PR access"
+          search_keywords: [github, git, repo]
+        - id: filesystem
+          description: "Local filesystem access scoped to a directory"
+          search_keywords: [filesystem, files, fs]
+    industry-data:
+      project_templates: [etl-pipeline, dashboard-research]
+      claude_skills:
+        - name: cookbook-data
+          description: "Notebooks and recipes from the Anthropic cookbook"
+          github: anthropics/anthropic-cookbook
+      mcp_servers:
+        - id: postgres
+          description: "Read-only Postgres access for analytics"
+          search_keywords: [postgres, sql, database]
+  personal:
+    default:
+      project_templates: [journaling-coach, weekly-review]
+      claude_skills:
+        - name: anthropic-courses
+          description: "Self-paced courses on prompting and Claude usage"
+          github: anthropics/courses
+      mcp_servers:
+        - id: filesystem
+          description: "Read and write notes in a local directory"
+          search_keywords: [filesystem, files, fs]
+  exploring:
+    default:
+      project_templates: [first-skill, mcp-hello-world]
+      claude_skills:
+        - name: mcp-python-sdk
+          description: "Build your first MCP server in Python"
+          github: modelcontextprotocol/python-sdk
+        - name: anthropic-cookbook
+          description: "Recipes for common Claude integration patterns"
+          github: anthropics/anthropic-cookbook
+      mcp_servers:
+        - id: fetch
+          description: "Simple HTTP fetch — good first MCP to wire up"
+          search_keywords: [fetch, http, url]
