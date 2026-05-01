@@ -8,6 +8,7 @@ module wires together the supporting modules:
   * start            — open a session, write step-1 adversarial prompt
   * record-answers   — persist captured interview answers (JSON on stdin)
   * suggest          — load curated mapping, gather + rank, write step-2 prompt
+  * prepare-scope-review — compose Phase 2.5 plan doc for /plan-ceo-review
   * accept           — scaffold each accepted project (JSON on stdin)
   * add-starting-files — copy user-specified files into <project>/context/raw/
   * status           — summary of managed projects, latest run, persona, hooks
@@ -37,6 +38,7 @@ if str(_here) not in sys.path:
 import interview  # type: ignore  # noqa: E402
 import suggest  # type: ignore  # noqa: E402
 import scaffold  # type: ignore  # noqa: E402
+import scope_review  # type: ignore  # noqa: E402
 import persona  # type: ignore  # noqa: E402
 import hooks_install  # type: ignore  # noqa: E402
 import paths as paths_mod  # type: ignore  # noqa: E402
@@ -206,6 +208,112 @@ def cmd_suggest(
         # non-fatal — the suggestions themselves are still useful
 
     _emit_json(result, out)
+    return 0
+
+
+# ---------------------------------------------------------------------------
+# subcommand: prepare-scope-review
+# ---------------------------------------------------------------------------
+
+def cmd_prepare_scope_review(
+    args: argparse.Namespace, stdout=None, stderr=None
+) -> int:
+    """Phase 2.5 hookup: compose a plan doc for the gstack /plan-ceo-review skill.
+
+    Reads the answers persisted under ``run_id``, regathers suggestions
+    (so the doc reflects current curated + freshness data), composes the
+    project-shaped plan via :mod:`scope_review`, and prints
+    ``{plan_path, prompt_path, project_slug}`` JSON to stdout.
+
+    Exit codes:
+      * 0 — plan written
+      * 2 — missing/invalid args, missing answers, or empty suggestions for
+        the requested slug
+      * 1 — unexpected error (mapping load, IO failure)
+    """
+    out = stdout or sys.stdout
+    err = stderr or sys.stderr
+
+    if not args.run_id:
+        err.write("prepare-scope-review failed: --run-id required\n")
+        return 2
+    slug = (args.project_slug or "").strip()
+    if not slug:
+        err.write("prepare-scope-review failed: --project-slug required\n")
+        return 2
+
+    answers = interview.read_answers(args.run_id)
+    if answers is None:
+        err.write(
+            "prepare-scope-review failed: no answers recorded for "
+            f"run_id={args.run_id}; run 'record-answers' first\n"
+        )
+        return 2
+
+    mapping_path = Path(args.mapping) if args.mapping else DEFAULT_MAPPING_PATH
+    try:
+        suggestions = suggest.gather(answers, mapping_path)
+    except Exception as exc:
+        err.write(f"prepare-scope-review failed during gather: {exc}\n")
+        return 1
+
+    # Build a project_spec around the requested slug. We don't require the
+    # slug to be a curated template — the user may have invented one — but
+    # we surface the curated template list so the reviewer can see other
+    # options the suggestion engine considered.
+    templates = suggestions.get("project_templates") or []
+    matched_template = slug if slug in templates else None
+    project_spec: Dict[str, Any] = {
+        "slug": slug,
+        "project_template": matched_template or slug,
+    }
+
+    try:
+        plan_path = scope_review.prepare(
+            run_id=args.run_id,
+            project_spec=project_spec,
+            answers=answers,
+            suggestions=suggestions,
+        )
+    except (ValueError, TypeError) as exc:
+        err.write(f"prepare-scope-review failed: {exc}\n")
+        return 2
+    except Exception as exc:
+        err.write(f"prepare-scope-review failed writing plan: {exc}\n")
+        return 1
+
+    # Build the invocation prompt and persist it next to the plan so Claude
+    # can paste it verbatim into the /plan-ceo-review Skill tool call.
+    try:
+        prompt_text = scope_review.prepare_invocation_prompt(plan_path, slug)
+    except Exception as exc:
+        err.write(
+            f"prepare-scope-review failed building invocation prompt: {exc}\n"
+        )
+        return 1
+
+    prompt_path = plan_path.with_name("scope-review-invocation-prompt.md")
+    tmp = prompt_path.with_suffix(prompt_path.suffix + ".tmp")
+    try:
+        tmp.write_text(prompt_text, encoding="utf-8")
+        os.replace(tmp, prompt_path)
+    except OSError as exc:
+        try:
+            if tmp.exists():
+                tmp.unlink()
+        except OSError:
+            pass
+        err.write(f"prepare-scope-review failed writing prompt: {exc}\n")
+        return 1
+
+    _emit_json(
+        {
+            "plan_path": str(plan_path),
+            "prompt_path": str(prompt_path),
+            "project_slug": slug,
+        },
+        out,
+    )
     return 0
 
 
@@ -410,6 +518,21 @@ def _build_parser() -> argparse.ArgumentParser:
         help=f"Path to mappings YAML (default: {DEFAULT_MAPPING_PATH}).",
     )
 
+    p_psr = sub.add_parser(
+        "prepare-scope-review",
+        help=(
+            "Phase 2.5: compose a plan doc for the gstack /plan-ceo-review "
+            "skill and emit {plan_path, prompt_path, project_slug} JSON."
+        ),
+    )
+    p_psr.add_argument("--run-id", required=True)
+    p_psr.add_argument("--project-slug", required=True)
+    p_psr.add_argument(
+        "--mapping",
+        default=None,
+        help=f"Path to mappings YAML (default: {DEFAULT_MAPPING_PATH}).",
+    )
+
     p_acc = sub.add_parser(
         "accept",
         help="Scaffold each accepted project (JSON {project_specs:[...]} on stdin).",
@@ -452,6 +575,8 @@ def main(argv: Optional[List[str]] = None, stdin=None, stdout=None, stderr=None)
         return cmd_record_answers(args, stdin=stdin, stdout=stdout, stderr=stderr)
     if args.cmd == "suggest":
         return cmd_suggest(args, stdout=stdout, stderr=stderr)
+    if args.cmd == "prepare-scope-review":
+        return cmd_prepare_scope_review(args, stdout=stdout, stderr=stderr)
     if args.cmd == "accept":
         return cmd_accept(args, stdin=stdin, stdout=stdout, stderr=stderr)
     if args.cmd == "add-starting-files":

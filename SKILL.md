@@ -207,6 +207,52 @@ selected skills list.
 
 ---
 
+## Phase 2.5 — Optional scope review (gstack /plan-ceo-review)
+
+Before scaffolding, offer the user a scope pressure-test. Ask:
+
+> Want to pressure-test scope before scaffolding? The `/plan-ceo-review`
+> skill from gstack will rate this against a 10-star product bar and
+> surface narrower wedges or scope expansions. Calibrated to your
+> archetype + industry + goals. Optional. ~10 min.
+
+If the user declines, proceed straight to Phase 3.
+
+If the user accepts, for each project they want reviewed:
+
+1. Compose the plan doc:
+
+   ```bash
+   python3 {skill_dir}/scripts/init.py prepare-scope-review \
+     --run-id <run-id> --project-slug <slug>
+   ```
+
+   Stdout emits `{plan_path, prompt_path, project_slug}` JSON. The plan
+   doc is written to `~/.ai-quickstart/runs/<run-id>/scope-review-plan.md`
+   with sections: Problem statement, Proposed scope, User profile,
+   Constraints, Open questions, and Context for the reviewer.
+
+2. Read the plan body at `plan_path`. Invoke `/plan-ceo-review` via the
+   Skill tool, passing the plan content plus a short note: "review for
+   scope expansion. user is `{archetype}` in `{industry}`, goals:
+   `{top_problems}`". The pre-built invocation prompt at `prompt_path`
+   is suitable to paste verbatim if you want to skip composing one.
+
+3. After the review completes, save the outcome notes to
+   `~/.ai-quickstart/runs/<run-id>/scope-review-outcome-<slug>.md` for
+   record (markdown body of whatever `/plan-ceo-review` produced).
+
+4. Show the user the findings. They may revise their Phase 2 choices —
+   change scope, swap project, drop or add skills — before continuing.
+   When they're ready, proceed to Phase 3.
+
+This is **skill-calls-skill**: ai-quickstart prepares the deterministic
+plan doc, Claude (you, orchestrating this skill) fires `/plan-ceo-review`
+through the Skill tool. Never block the user on a `/plan-ceo-review`
+failure — if the gstack skill is unavailable, note it and proceed.
+
+---
+
 ## Phase 3 — Scaffold the project
 
 Scaffold each accepted project (compathy creates the structure, anecdote
