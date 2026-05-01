@@ -41,6 +41,7 @@ import persona  # type: ignore  # noqa: E402
 import hooks_install  # type: ignore  # noqa: E402
 import paths as paths_mod  # type: ignore  # noqa: E402
 import eval_persona_heal  # type: ignore  # noqa: E402
+import next_project as next_project_mod  # type: ignore  # noqa: E402
 
 
 VALID_ARCHETYPES = ("job", "personal", "exploring")
@@ -381,6 +382,46 @@ def cmd_status(args: argparse.Namespace, stdout=None, stderr=None) -> int:
 
 
 # ---------------------------------------------------------------------------
+# subcommand: next-project
+# ---------------------------------------------------------------------------
+
+def _default_persona_path() -> Path:
+    return _home_root() / "persona" / "persona.md"
+
+
+def cmd_next_project(args: argparse.Namespace, stdout=None, stderr=None) -> int:
+    out = stdout or sys.stdout
+    err = stderr or sys.stderr
+    persona_path = (
+        Path(args.persona).expanduser() if args.persona else _default_persona_path()
+    )
+    mapping_path = Path(args.mapping) if args.mapping else DEFAULT_MAPPING_PATH
+    if not persona_path.exists():
+        err.write(
+            f"next-project failed: persona file not found at {persona_path}; "
+            "run /ai-quickstart first to create one\n"
+        )
+        return 2
+    try:
+        result = next_project_mod.recommend(
+            persona_path=persona_path,
+            mapping_path=mapping_path,
+            top_n=args.top,
+        )
+    except FileNotFoundError as exc:
+        err.write(f"next-project failed: {exc}\n")
+        return 2
+    except (ValueError, OSError) as exc:
+        err.write(f"next-project failed: {exc}\n")
+        return 1
+    except Exception as exc:  # pragma: no cover - defensive
+        err.write(f"next-project failed: {exc}\n")
+        return 1
+    _emit_json(result, out)
+    return 0
+
+
+# ---------------------------------------------------------------------------
 # argparse wiring
 # ---------------------------------------------------------------------------
 
@@ -440,6 +481,23 @@ def _build_parser() -> argparse.ArgumentParser:
     p_eval.add_argument("--case-filter", default=None,
                         help="Run only the case with this exact name.")
 
+    p_next = sub.add_parser(
+        "next-project",
+        help="Recommend the user's NEXT project from persona + curated mapping.",
+    )
+    p_next.add_argument(
+        "--top", type=int, default=5,
+        help="Maximum number of recommendations to return (default: 5).",
+    )
+    p_next.add_argument(
+        "--mapping", default=None,
+        help=f"Path to mappings YAML (default: {DEFAULT_MAPPING_PATH}).",
+    )
+    p_next.add_argument(
+        "--persona", default=None,
+        help="Path to persona.md (default: $AI_QUICKSTART_HOME/persona/persona.md).",
+    )
+
     return p
 
 
@@ -466,6 +524,8 @@ def main(argv: Optional[List[str]] = None, stdin=None, stdout=None, stderr=None)
         if args.case_filter:
             delegated_argv += ["--case-filter", args.case_filter]
         return eval_persona_heal.main(delegated_argv, stdout=stdout, stderr=stderr)
+    if args.cmd == "next-project":
+        return cmd_next_project(args, stdout=stdout, stderr=stderr)
     return 2  # pragma: no cover - argparse rejects unknowns first
 
 

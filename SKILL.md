@@ -278,6 +278,27 @@ persona prose given the inputs, (2) judge it against the listed expectations,
 score_avg}`. Optional flags: `--case-filter <name>` runs one case, `--eval-file
 <path>` overrides the bundled fixture.
 
+`/ai-quickstart next-project` recommends the user's NEXT project from
+their existing persona plus the curated mapping. v1 collected the persona;
+v1.1 reads it back to score every (archetype, industry, project_template)
+combo and surface a ranked list. Run via:
+
+```bash
+python3 {skill_dir}/scripts/init.py next-project --top 5
+```
+
+Stdout emits JSON `{recommendations, reasoning, persona_signals, warnings}`.
+Each recommendation includes `project_template`, `archetype`, `industry`,
+`skills` (curated names), `score` (0..1), and `why` (signal list). Scoring
+factors: archetype match (+0.4), industry match (+0.3), goal alignment with
+top_problems (+0.15), activity within 30 days (+0.1), starter boost when
+project_count < 3 (+0.05). Pure computation; no network.
+
+Optional flags: `--top N` (default 5), `--mapping PATH` (default
+bundled `mappings/personas.yaml`), `--persona PATH` (default
+`$AI_QUICKSTART_HOME/persona/persona.md`). Exits 2 if the persona file is
+missing with a clear stderr message; exits 1 on other errors.
+
 ---
 
 ## Rules You Follow
