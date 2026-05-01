@@ -317,6 +317,40 @@ class HooksInstallTestCase(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             hooks_install.install(consent=True)
 
+    # -------------------------------------------------------------------
+    # runtime gating: hooks are claude-code only in v1.1
+    # -------------------------------------------------------------------
+    def test_install_is_noop_on_codex_runtime(self):
+        """When detect_host_runtime() returns codex, install() must
+        return False, write nothing to settings, and write no manifest."""
+        import io
+        with mock.patch(
+            "hooks_install.paths_mod.detect_host_runtime",
+            return_value=hooks_install.paths_mod.RUNTIME_CODEX,
+        ):
+            captured = io.StringIO()
+            with mock.patch.object(sys, "stderr", captured):
+                ok = hooks_install.install(consent=True)
+        self.assertFalse(ok)
+        self.assertFalse(self.settings_path.exists())
+        self.assertFalse(self.manifest_path.exists())
+        self.assertIn("hook install skipped", captured.getvalue())
+        self.assertIn("codex", captured.getvalue())
+
+    def test_install_is_noop_on_antigravity_runtime(self):
+        import io
+        with mock.patch(
+            "hooks_install.paths_mod.detect_host_runtime",
+            return_value=hooks_install.paths_mod.RUNTIME_ANTIGRAVITY,
+        ):
+            captured = io.StringIO()
+            with mock.patch.object(sys, "stderr", captured):
+                ok = hooks_install.install(consent=True)
+        self.assertFalse(ok)
+        self.assertFalse(self.settings_path.exists())
+        self.assertFalse(self.manifest_path.exists())
+        self.assertIn("antigravity", captured.getvalue())
+
 
 if __name__ == "__main__":
     unittest.main()
