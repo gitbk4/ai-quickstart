@@ -716,6 +716,129 @@
         "prose preserves the team-unblocking goal",
         "prose stays under 400 words"
       ]
+    },
+    {
+      "name": "nonprofit-development-with-grant-anecdotes",
+      "input": {
+        "current_persona": {
+          "identity": {
+            "role": "development director",
+            "industry": "industry-nonprofit-development",
+            "archetype": "job"
+          },
+          "goals": {
+            "top_problems": [
+              "grant writing eats every Friday",
+              "donor research is scattered across spreadsheets and PDFs"
+            ],
+            "desired_outcomes": [
+              "cut grant draft cycle from 3 weeks to 1",
+              "build a single donor-context view for board meetings"
+            ]
+          },
+          "preferences": {
+            "project_style": "minimal",
+            "coding_languages": [],
+            "skill_tolerance": "permissive"
+          },
+          "activity": {
+            "project_count": 2,
+            "total_skill_uses": 11,
+            "top_projects": [
+              "grant-research-assistant",
+              "donor-segmentation-notes"
+            ],
+            "last_active": "2026-04-30T14:00:00Z"
+          },
+          "generated": {
+            "updated_at": "2026-04-30T14:00:00Z",
+            "anecdote_count": 2,
+            "version": 4
+          }
+        },
+        "anecdotes": [
+          {
+            "slug": "grant-research-assistant",
+            "content": "# Anecdotes: grant-research-assistant\n\n## 2026-04-26T09:00:00Z\n\nUsed the assistant to summarize a foundation 990 and a recent RFP. Cut\nfirst-pass research from ~4 hours to ~45 minutes. Surfaced one priority\narea (early childhood literacy) we'd missed in our prior cycle.\n\n## 2026-04-29T16:00:00Z\n\nDrafted the LOI from the assistant's funder profile. Required two passes\nfor tone (it leaned too transactional on first try); now have a tighter\ntemplate.\n"
+          },
+          {
+            "slug": "donor-segmentation-notes",
+            "content": "# Anecdotes: donor-segmentation-notes\n\n## 2026-04-30T11:00:00Z\n\nRolled up the last 18 months of giving into 4 segments (recurring, lapsed,\nmajor, board-circle). Pulled into a single board-prep doc. Major-gift\noutreach plan for Q3 sourced from this segmentation.\n"
+          }
+        ],
+        "activity_summary": {
+          "weeks": {},
+          "generated_at": "2026-04-30T00:00:00Z"
+        }
+      },
+      "expectations": [
+        "prose mentions the user is a development director or fundraiser at a nonprofit",
+        "prose preserves at least one stated goal (grant cycle time OR donor-context view)",
+        "prose does not invent a project not present in anecdotes",
+        "prose uses nonprofit vocabulary (grants, donors, funders) and avoids commercial-customer framing",
+        "prose stays under 400 words",
+        "frontmatter activity.project_count remains 2 (matches anecdote count)"
+      ]
+    },
+    {
+      "name": "nonprofit-programs-impact-reporting",
+      "input": {
+        "current_persona": {
+          "identity": {
+            "role": "program manager",
+            "industry": "industry-nonprofit-programs",
+            "archetype": "job"
+          },
+          "goals": {
+            "top_problems": [
+              "impact reports take 6 weeks because data lives in 4 systems",
+              "beneficiary stories never make it from intake notes to board reports"
+            ],
+            "desired_outcomes": [
+              "monthly impact snapshot with consistent metrics",
+              "story pipeline from program staff to comms team"
+            ]
+          },
+          "preferences": {
+            "project_style": "minimal",
+            "coding_languages": [
+              "python"
+            ],
+            "skill_tolerance": "strict"
+          },
+          "activity": {
+            "project_count": 1,
+            "total_skill_uses": 5,
+            "top_projects": [
+              "impact-report-drafter"
+            ],
+            "last_active": "2026-04-30T17:00:00Z"
+          },
+          "generated": {
+            "updated_at": "2026-04-30T17:00:00Z",
+            "anecdote_count": 1,
+            "version": 3
+          }
+        },
+        "anecdotes": [
+          {
+            "slug": "impact-report-drafter",
+            "content": "# Anecdotes: impact-report-drafter\n\n## 2026-04-28T13:00:00Z\n\nFirst monthly snapshot drafted. Pulled enrollment, completion, and\nfollow-up data from the SQLite intake DB and turned it into a 2-page\ninternal brief. Three program staff reviewed; two requested adding a\nbeneficiary-quote section.\n\n## 2026-04-30T15:30:00Z\n\nAdded the quote section. Pulled three quotes from the prior month's\nintake notes (with consent). Cycle for next month: ~2 hours instead of\n6 weeks.\n"
+          }
+        ],
+        "activity_summary": {
+          "weeks": {},
+          "generated_at": "2026-04-30T00:00:00Z"
+        }
+      },
+      "expectations": [
+        "prose identifies the user as a nonprofit program manager",
+        "prose preserves the impact-report cycle-time goal",
+        "prose mentions beneficiary stories or beneficiary-quote work as a stated outcome",
+        "prose does not hallucinate a second project (only impact-report-drafter exists in anecdotes)",
+        "prose uses program/beneficiary language, not customer/user language",
+        "prose stays under 400 words"
+      ]
     }
   ]
 }

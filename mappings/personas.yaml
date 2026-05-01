@@ -71,6 +71,68 @@ archetypes:
         - id: postgres
           description: "Read-only Postgres access for analytics"
           search_keywords: [postgres, sql, database]
+    industry-nonprofit-development:
+      project_templates: [grant-research-assistant, donor-segmentation-notes]
+      claude_skills:
+        - name: research-assistant
+          description: "Research funders and summarize public 990s, RFPs, and program priorities"
+          github: anthropics/anthropic-cookbook
+          mcpmarket_search: "research"
+        - name: prompt-eng-tutorial
+          description: "Templates for grant narrative drafting and donor letter tone"
+          github: anthropics/prompt-eng-interactive-tutorial
+      mcp_servers:
+        - id: fetch
+          description: "Pull foundation 990s, grantmaker pages, and RFP PDFs"
+          search_keywords: [fetch, http, url]
+        - id: gdrive
+          description: "Read donor records and grant calendars from Google Drive"
+          search_keywords: [gdrive, google, drive]
+    industry-nonprofit-programs:
+      project_templates: [impact-report-drafter, beneficiary-intake-notes]
+      claude_skills:
+        - name: cookbook-data
+          description: "Recipes adaptable to outcome tracking and impact metrics"
+          github: anthropics/anthropic-cookbook
+      mcp_servers:
+        - id: sqlite
+          description: "Lightweight beneficiary or program database"
+          search_keywords: [sqlite, database, sql]
+        - id: filesystem
+          description: "Read program docs, intake forms, MOUs from local folders"
+          search_keywords: [filesystem, files, fs]
+    industry-nonprofit-comms:
+      project_templates: [newsletter-drafter, story-collection-pipeline]
+      claude_skills:
+        - name: research-assistant
+          description: "Summarize program updates and turn beneficiary stories into copy"
+          github: anthropics/anthropic-cookbook
+        - name: courses-curriculum
+          description: "Patterns for editorial calendars and campaign sequences"
+          github: anthropics/courses
+      mcp_servers:
+        - id: gmail
+          description: "Send and triage donor and partner email"
+          search_keywords: [gmail, email, mail]
+        - id: slack
+          description: "Coordinate cross-team comms with program staff"
+          search_keywords: [slack, chat, team]
+    industry-nonprofit-operations:
+      project_templates: [volunteer-matcher, internal-training-builder]
+      claude_skills:
+        - name: anthropic-courses
+          description: "Reusable training scaffolds for staff and volunteer onboarding"
+          github: anthropics/courses
+        - name: claude-code-reference
+          description: "Patterns for internal tools and small automations"
+          github: anthropics/claude-code
+      mcp_servers:
+        - id: gdrive
+          description: "Volunteer rosters, MOUs, and SOPs in Google Drive"
+          search_keywords: [gdrive, google, drive]
+        - id: filesystem
+          description: "Local SOP and runbook directory"
+          search_keywords: [filesystem, files, fs]
   personal:
     default:
       project_templates: [journaling-coach, weekly-review]
