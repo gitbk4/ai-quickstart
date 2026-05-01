@@ -32,6 +32,33 @@ Phase 0 runs on every invocation. It is fast (<2s on warm cache) and
 non-blocking — every check soft-fails with a stderr warning rather than
 aborting the skill.
 
+### Phase 0.0: Detect host runtime
+
+ai-quickstart works as a portable skill across **Claude Code**, **OpenAI
+Codex CLI**, and **Google Antigravity**. Subsequent Phase 0 steps adjust
+their paths and behavior based on which runtime is hosting the skill.
+
+```bash
+python3 {skill_dir}/scripts/paths.py --detect-runtime
+```
+
+The JSON output reports `runtime` (one of `claude-code`, `codex`,
+`antigravity`, `unknown`), `host_settings_path`, and `host_skills_dir`.
+
+Cache the runtime label for the rest of Phase 0. The mapping you should
+use for substitutions below:
+
+| Runtime      | Skills dir              | Settings file                    | Hooks |
+|--------------|-------------------------|----------------------------------|-------|
+| claude-code  | `~/.claude/skills`      | `~/.claude/settings.json`        | yes   |
+| codex        | `~/.codex/skills`       | `~/.codex/config.toml`           | no (v1.2) |
+| antigravity  | `~/.antigravity/skills` | `~/.antigravity/settings.json`   | no (v1.2) |
+| unknown      | (assume claude-code)    | (assume claude-code)             | best-effort |
+
+If runtime is `unknown`, fall through with claude-code paths and surface a
+single stderr warning so the user knows nothing about their environment was
+detected. See `INSTALL.md` for the full per-runtime install matrix.
+
 ### Phase 0a — Self-update ai-quickstart
 
 ```bash
@@ -60,6 +87,15 @@ PostToolUse hooks. Older versions: skip hook install with a clear message.
 ### Phase 0c — Detect compathy and auto-install at pinned SHA
 
 Compathy is a soft dep. ai-quickstart's Step 3 shells out to it.
+
+The skills directory depends on the runtime detected in Phase 0.0:
+
+* claude-code: `~/.claude/skills/compathy`
+* codex:       `~/.codex/skills/compathy`
+* antigravity: `~/.antigravity/skills/compathy`
+
+Resolve `SKILLS_DIR` from `host_skills_dir` in the Phase 0.0 JSON output and
+substitute it below. The example assumes claude-code:
 
 ```bash
 COMPATHY_DIR="${HOME}/.claude/skills/compathy"
@@ -116,15 +152,26 @@ python3 {skill_dir}/scripts/paths.py --ensure-dirs
 Creates `persona/`, `persona/anecdotes/`, `runs/`, `cache/github/`, and
 `cache/mcpmarket/` if missing. Idempotent.
 
-### Phase 0f — Install Claude Code hooks (delegated)
+### Phase 0f: Install hooks (claude-code only in v1.1)
 
-The hook installer is owned by Lane F. Phase 0 delegates to:
+Hook support is runtime-dependent:
+
+* **claude-code:** install two PostToolUse hooks into
+  `~/.claude/settings.json` (the existing flow).
+* **codex / antigravity:** skip with a stderr warning. Codex CLI and
+  Antigravity expose different hook models that v1.1 does not yet support.
+  The user can still record activity manually via
+  `/ai-quickstart log-activity`. Tracked for v1.2.
+
+For all runtimes, delegate to the installer (it self-detects and no-ops on
+unsupported runtimes):
 
 ```bash
 python3 {skill_dir}/scripts/hooks_install.py --check
 ```
 
-If the script reports `installed: false`, it will prompt:
+If the script reports `installed: false` AND the runtime is claude-code, it
+will prompt:
 
 > ai-quickstart will add 2 PostToolUse hooks to ~/.claude/settings.json.
 > These fire only when cwd is a managed project (stat-check <1ms).
@@ -133,7 +180,8 @@ If the script reports `installed: false`, it will prompt:
 On consent, the installer atomically merges the hooks into `settings.json`
 and records exact entries into `~/.ai-quickstart/installed-hooks.json` for
 later uninstall. This step is also a no-op when Claude Code's hook system
-is unavailable (Phase 0b detected an incompatible version).
+is unavailable (Phase 0b detected an incompatible version) OR when the
+detected runtime is codex/antigravity.
 
 <!-- LANE F implements scripts/hooks_install.py and hook_runner.py. Phase 0f
 calls it; the installer itself lives elsewhere. -->

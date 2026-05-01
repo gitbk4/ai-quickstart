@@ -16,6 +16,13 @@ The exact entries written are recorded in
 source of truth for ``uninstall()`` so we can remove ONLY our entries and
 leave the user's other hooks untouched.
 
+Runtime compatibility (v1.1):
+    * claude-code:  full PostToolUse hook flow (this file).
+    * codex:        no-op with stderr warning. Codex CLI hooks are not yet
+                    supported. Planned for v1.2.
+    * antigravity:  no-op with stderr warning. Antigravity hooks are not yet
+                    supported. Planned for v1.2.
+
 Stdlib only. Python 3.9+ compatible.
 """
 
@@ -28,6 +35,13 @@ import sys
 import tempfile
 from pathlib import Path
 from typing import Tuple
+
+# Sibling import: ``paths`` lives next to this file. Mirror the heal.py
+# pattern so tests that monkey-patch ``paths`` see the same module instance.
+_here = Path(__file__).resolve().parent
+if str(_here) not in sys.path:
+    sys.path.insert(0, str(_here))
+import paths as paths_mod  # type: ignore  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Hook command (bash one-liner)
@@ -200,7 +214,28 @@ def install(consent: bool = False) -> bool:
     entries and records the exact entries in the manifest.
 
     Idempotent: if the manifest already exists, returns True without writing.
+
+    Runtime gating (v1.1):
+        Only ``claude-code`` is supported. When the host runtime is detected
+        as ``codex`` or ``antigravity``, the call is a graceful no-op: a
+        stderr warning is printed and ``False`` is returned. No settings or
+        manifest files are written. Codex/Antigravity hook support is
+        planned for v1.2. When the runtime is ``unknown`` we still attempt
+        the legacy claude-code flow so existing installs that pre-date the
+        runtime detection (e.g. tests with ``CLAUDE_HOME`` overridden but
+        no ``~/.claude`` dir created yet) continue to work.
     """
+    runtime = paths_mod.detect_host_runtime()
+    if runtime in (paths_mod.RUNTIME_CODEX, paths_mod.RUNTIME_ANTIGRAVITY):
+        print(
+            f"ai-quickstart: hook install skipped: hooks not yet supported "
+            f"in runtime '{runtime}'. Manual logging fallback: run "
+            f"`/ai-quickstart log-activity` from the project to record "
+            f"activity for persona heal. Tracked for v1.2.",
+            file=sys.stderr,
+        )
+        return False
+
     if is_installed():
         # Idempotent: already installed.
         return True
@@ -339,6 +374,8 @@ def _main(argv: list) -> int:
         print("installed" if is_installed() else "not installed")
         version, _ = detect_claude_code_version()
         print(f"claude version: {version}")
+        runtime = paths_mod.detect_host_runtime()
+        print(f"host runtime: {runtime}")
         return 0
     print(f"unknown command: {cmd}", file=sys.stderr)
     return 2
