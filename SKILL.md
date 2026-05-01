@@ -258,11 +258,25 @@ python3 {skill_dir}/scripts/heal.py prepare-context | <synthesize new prose> | \
 
 `/ai-quickstart` with no args runs Phase 0 → Phase 1 → Phase 2 → Phase 3.
 
-`/ai-quickstart heal` — manual persona heal. <!-- LANE G implements heal.py. -->
+`/ai-quickstart heal` — manual persona heal. Reads activity + anecdotes,
+flock-protected, atomic write with backup, shows diff to user.
 
 `/ai-quickstart uninstall` — removes hooks per `installed-hooks.json` manifest;
 optionally `rm -rf ~/.ai-quickstart` after confirmation.
-<!-- LANE F implements uninstall logic. -->
+
+`/ai-quickstart eval` — runs the persona-heal eval suite in Claude-as-judge
+mode (no API key needed). Run via:
+
+```bash
+python3 {skill_dir}/scripts/init.py eval
+```
+
+The harness prints structured prompt blocks to stdout. As Claude orchestrating
+this skill, you read the output, then for each case: (1) synthesize a candidate
+persona prose given the inputs, (2) judge it against the listed expectations,
+(3) emit one JSON verdict per case, then a final summary `{total, passed,
+score_avg}`. Optional flags: `--case-filter <name>` runs one case, `--eval-file
+<path>` overrides the bundled fixture.
 
 ---
 

@@ -40,6 +40,7 @@ import scaffold  # type: ignore  # noqa: E402
 import persona  # type: ignore  # noqa: E402
 import hooks_install  # type: ignore  # noqa: E402
 import paths as paths_mod  # type: ignore  # noqa: E402
+import eval_persona_heal  # type: ignore  # noqa: E402
 
 
 VALID_ARCHETYPES = ("job", "personal", "exploring")
@@ -430,6 +431,15 @@ def _build_parser() -> argparse.ArgumentParser:
         "status", help="Print a JSON summary of ai-quickstart state."
     )
 
+    p_eval = sub.add_parser(
+        "eval",
+        help="Emit the persona-heal eval prompt for Claude-as-judge mode.",
+    )
+    p_eval.add_argument("--eval-file", default=None,
+                        help="Path to eval JSON (default: bundled).")
+    p_eval.add_argument("--case-filter", default=None,
+                        help="Run only the case with this exact name.")
+
     return p
 
 
@@ -448,6 +458,14 @@ def main(argv: Optional[List[str]] = None, stdin=None, stdout=None, stderr=None)
         return cmd_add_starting_files(args, stdin=stdin, stdout=stdout, stderr=stderr)
     if args.cmd == "status":
         return cmd_status(args, stdout=stdout, stderr=stderr)
+    if args.cmd == "eval":
+        # Delegate to eval_persona_heal.run with arg shape it expects.
+        delegated_argv = ["run"]
+        if args.eval_file:
+            delegated_argv += ["--eval", args.eval_file]
+        if args.case_filter:
+            delegated_argv += ["--case-filter", args.case_filter]
+        return eval_persona_heal.main(delegated_argv, stdout=stdout, stderr=stderr)
     return 2  # pragma: no cover - argparse rejects unknowns first
 
 
