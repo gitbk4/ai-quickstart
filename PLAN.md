@@ -8,7 +8,7 @@ suggestions.
 **Plan reviewed:** 2026-04-29. /plan-eng-review with outside voice.
 **Repo target:** GitHub-hosted at `<owner>/ai-quickstart`. Local working dir
 `/Users/bk/Code/ai-quickstart`.
-**v2 deferred:** see "Deferred to v2" section.
+**v2 deferred:** see "Deferred to v2" section. **Updated 2026-05-02:** 2 items shipped post-v1 (lanes m, n); 5 small items in flight (lanes p–t); 2 big items (alternatives engine, web view) pending design review.
 
 ---
 
@@ -474,18 +474,21 @@ GAPS: 56 to write — 47 unit, 8 E2E, 1 eval suite
 
 ---
 
-## NOT in scope (deferred to v2 with rationale)
+## NOT in scope (originally deferred to v2 with rationale)
 
-| Item | Why deferred |
-|------|--------------|
-| `/next-project` subskill | Persona collection is in v1; consumption can wait. Defer payoff to when v1 has real users. |
-| SaaS-vs-OSS alternative engine | Real research effort per persona; v1 uses curated mapping. |
-| Codex + Antigravity skill compatibility | Single SKILL.md works in both, but testing in two runtimes is real cost. v2. |
-| Auto-heal threshold (>N new entries triggers heal) | v1 has manual heal + auto-on-init. Threshold is a refinement, not a blocker. |
-| Step-2 deeper-interview eval suite | LLM-quality eval of generated interviews. Costly to maintain, low signal in week 1. |
-| Adversarial-prompt-files eval suite | Same reason. |
-| Contract tests against compathy's actual scaffold output | Compathy's surface is small; manual verification fine for v1. v2 if compathy churns. |
-| Persona diff/review UX as web view | v1 prints unified diff to terminal. Web view is polish, not load-bearing. |
+> **Status update (2026-05-02):** `/next-project` and Codex/Antigravity compat shipped post-v1 (lanes m, n). Five "small" items now in flight (lanes p–t). Remaining big items (SaaS-vs-OSS engine, persona diff web view) pending design review.
+
+| Item | Why deferred | Status |
+|------|--------------|--------|
+| `/next-project` subskill | Persona collection is in v1; consumption can wait. Defer payoff to when v1 has real users. | ✅ shipped (lane-m, commit `c77338e`) |
+| SaaS-vs-OSS alternative engine | Real research effort per persona; v1 uses curated mapping. | ⏳ pending design review |
+| Codex + Antigravity skill compatibility | Single SKILL.md works in both, but testing in two runtimes is real cost. v2. | ✅ shipped (lane-n, commit `8ecf530`) |
+| Auto-heal threshold (>N new entries triggers heal) | v1 has manual heal + auto-on-init. Threshold is a refinement, not a blocker. | 🚧 lane-p in flight |
+| Step-2 deeper-interview eval suite | LLM-quality eval of generated interviews. Costly to maintain, low signal in week 1. | 🚧 lane-s in flight |
+| Adversarial-prompt-files eval suite | Same reason. | 🚧 lane-r in flight |
+| Contract tests against compathy's actual scaffold output | Compathy's surface is small; manual verification fine for v1. v2 if compathy churns. | 🚧 lane-t in flight |
+| Persona diff/review UX as web view | v1 prints unified diff to terminal. Web view is polish, not load-bearing. | ⏳ pending design review |
+| "Lock this paragraph" mechanism on persona prose | Drift mitigation in heal flow (see Accepted Risks §4). | 🚧 lane-q in flight |
 
 ---
 
@@ -589,14 +592,15 @@ Lane 5: F (hooks)             ──────── I ┘
 18. activity.jsonl line invariant: ≤4096 bytes (POSIX atomic append)
 19. flock-on-NFS warning: Phase 0 detects sync'd FS
 
-### Deferred (to v2 with rationale)
-1. /next-project subskill
-2. SaaS-vs-OSS alternative engine
-3. Codex + Antigravity compatibility
-4. Auto-heal threshold
-5. Interview + adversarial prompt eval suites
-6. Contract tests against compathy
-7. Persona diff/review web UX
+### Deferred (to v2 with rationale) — STATUS as of 2026-05-02
+1. ~~/next-project subskill~~ — ✅ shipped (lane-m)
+2. SaaS-vs-OSS alternative engine — ⏳ pending design review (big feature)
+3. ~~Codex + Antigravity compatibility~~ — ✅ shipped (lane-n)
+4. Auto-heal threshold — 🚧 lane-p in flight
+5. Interview + adversarial prompt eval suites — 🚧 lanes r/s in flight
+6. Contract tests against compathy — 🚧 lane-t in flight
+7. Persona diff/review web UX — ⏳ pending design review (big feature)
+8. "Lock this paragraph" persona prose mechanism — 🚧 lane-q in flight
 
 ### Unresolved decisions
 None. Every AskUserQuestion was answered.
