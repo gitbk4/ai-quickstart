@@ -11,18 +11,36 @@ processes are atomic on local POSIX filesystems as long as the line is
 <= ``PIPE_BUF`` (~4096 bytes). The script enforces a 4096-byte cap by
 truncating the ``file`` field if necessary.
 
+After a successful append, the hook also checks whether the activity log has
+accumulated more than ``AUTO_HEAL_THRESHOLD`` entries since the last
+successful heal. If so AND the heal lock is not currently held, the hook
+spawns a detached subprocess that writes a ``.heal-pending`` sentinel marker;
+the next interactive ``/ai-quickstart`` invocation picks up that sentinel and
+runs a full heal pipeline. The hook never blocks on this trigger -- the
+subprocess is detached and any failure is swallowed silently.
+
 Stdlib only. Python 3.9+ compatible.
 """
 
 from __future__ import annotations
 
 import datetime as _dt
+import fcntl
 import json
 import os
+import subprocess
 import sys
 from pathlib import Path
 
 MAX_LINE_BYTES = 4096
+
+# Auto-heal trigger threshold. When activity.jsonl accumulates >= this many
+# new entries since the last successful heal, the next hook invocation that
+# crosses the threshold spawns a detached heal-trigger subprocess. The value
+# is a refinement knob (see PLAN.md "Auto-heal threshold"); 20 entries is a
+# rough sweet spot -- enough to amortize heal cost across many tool uses but
+# low enough that the persona stays current within a single working session.
+AUTO_HEAL_THRESHOLD = 20
 
 
 def _ai_quickstart_home() -> Path:
@@ -38,6 +56,41 @@ def _managed_projects_path() -> Path:
 
 def _activity_path() -> Path:
     return _ai_quickstart_home() / "persona" / "activity.jsonl"
+
+
+def _heal_lock_path() -> Path:
+    return _ai_quickstart_home() / "persona" / ".heal.lock"
+
+
+def _last_heal_state_path() -> Path:
+    """State file recording the activity.jsonl byte offset at last heal.
+
+    Shape: ``{"offset": <int>, "ts": "<iso8601>"}``. ``offset`` is the size
+    of activity.jsonl (in bytes) at the moment heal.write last succeeded;
+    "entries since last heal" = newline-terminated lines after that byte.
+    Missing/corrupt file -> offset 0 (count from the beginning of the file).
+    """
+    return _ai_quickstart_home() / "persona" / ".last-heal.json"
+
+
+def _heal_pending_path() -> Path:
+    """Sentinel marker written by the detached trigger subprocess.
+
+    Presence of this file signals the next interactive /ai-quickstart flow
+    to run a heal pipeline. The file is removed by the heal write success
+    path; we don't unlink it from the hook.
+    """
+    return _ai_quickstart_home() / "persona" / ".heal-pending"
+
+
+def _heal_script_path() -> Path:
+    """Best-effort path to scripts/heal.py for the trigger subprocess.
+
+    Resolved relative to this file so the hook works whether the skill is
+    installed under ``~/.claude/skills/ai-quickstart/`` or run from a dev
+    checkout. The caller falls back gracefully if the path doesn't exist.
+    """
+    return Path(__file__).resolve().parent / "heal.py"
 
 
 def _utc_now_iso() -> str:
@@ -190,6 +243,181 @@ def _append_line(path: Path, payload: bytes) -> None:
         os.close(fd)
 
 
+# ---------------------------------------------------------------------------
+# Auto-heal threshold trigger.
+#
+# Design:
+#   * "entries since last heal" is computed by reading activity.jsonl from
+#     the byte offset recorded in .last-heal.json (default 0 if absent) and
+#     counting newline-terminated lines after that point.
+#   * Heal write success resets the offset (heal.py owns that side).
+#   * If the count >= AUTO_HEAL_THRESHOLD AND no heal is currently in
+#     progress (we sniff the .heal.lock with a non-blocking flock), we
+#     spawn a detached subprocess that writes a .heal-pending sentinel.
+#     The subprocess is intentionally minimal -- it does NOT acquire the
+#     heal lock (full heal needs LLM synthesis, which only the interactive
+#     /ai-quickstart pipeline can drive). The sentinel signals the next
+#     /ai-quickstart invocation to run a heal.
+#   * Every step is wrapped in try/except. Any failure (lock contention,
+#     subprocess spawn failure, missing heal.py, disk error) is swallowed
+#     silently so the hook never blocks Claude Code.
+# ---------------------------------------------------------------------------
+
+
+def _read_last_heal_offset() -> int:
+    """Return the byte offset of activity.jsonl at the last successful heal.
+
+    Returns 0 on missing file, parse failure, or out-of-range values so the
+    caller treats the entire file as "since last heal".
+    """
+    try:
+        with open(_last_heal_state_path(), "r", encoding="utf-8") as fh:
+            data = json.load(fh)
+    except (OSError, ValueError):
+        return 0
+    if not isinstance(data, dict):
+        return 0
+    offset = data.get("offset")
+    if not isinstance(offset, int) or offset < 0:
+        return 0
+    return offset
+
+
+def _count_entries_since_offset(activity_path: Path, offset: int) -> int:
+    """Return the number of newline-terminated lines after ``offset``.
+
+    Soft-fails to 0 on any IO error: the caller treats that as "below
+    threshold" rather than mistakenly triggering a heal on a flaky read.
+    """
+    try:
+        size = activity_path.stat().st_size
+    except OSError:
+        return 0
+    if offset > size:
+        # The activity file shrank (rotation, manual edit). Treat as a
+        # fresh start: count from 0. We don't rewrite the offset here --
+        # heal write owns that.
+        offset = 0
+    if size == offset:
+        return 0
+    try:
+        with open(activity_path, "rb") as fh:
+            try:
+                fh.seek(offset)
+            except OSError:
+                return 0
+            count = 0
+            for _ in fh:
+                count += 1
+            return count
+    except OSError:
+        return 0
+
+
+def _heal_in_progress() -> bool:
+    """Return True iff another process holds the heal flock.
+
+    We open the lock file and try a non-blocking exclusive acquire. If we
+    get it, we release it immediately -- we're only sniffing. If we can't
+    create/open the lock file at all, we conservatively report "not in
+    progress" so spurious filesystem errors don't permanently disable
+    auto-heal triggering.
+    """
+    lock_path = _heal_lock_path()
+    try:
+        lock_path.parent.mkdir(parents=True, exist_ok=True)
+        fd = os.open(str(lock_path), os.O_RDWR | os.O_CREAT, 0o644)
+    except OSError:
+        return False
+    try:
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            return True
+        except OSError:
+            # Some filesystems (NFS) refuse flock entirely. Treat as "not
+            # in progress" so we don't permanently disable triggering.
+            return False
+        # We got the lock; release immediately.
+        try:
+            fcntl.flock(fd, fcntl.LOCK_UN)
+        except OSError:
+            pass
+        return False
+    finally:
+        try:
+            os.close(fd)
+        except OSError:
+            pass
+
+
+def _spawn_heal_trigger() -> None:
+    """Spawn a detached subprocess that writes the .heal-pending sentinel.
+
+    The subprocess is fully detached (start_new_session=True, stdio
+    redirected to /dev/null) so the hook returns immediately even if the
+    spawned process is slow. Any failure (missing python, missing heal.py,
+    permission error) is swallowed -- the next hook tick will retry.
+    """
+    heal_py = _heal_script_path()
+    if not heal_py.exists():
+        return
+    try:
+        devnull = open(os.devnull, "rb+")
+    except OSError:
+        return
+    try:
+        # We pass AI_QUICKSTART_HOME explicitly so the subprocess sees the
+        # same home as the hook (matters for tests and tmp-dir overrides).
+        env = dict(os.environ)
+        # Fire and forget: the subprocess is detached via start_new_session
+        # so it survives if our parent exits, and stdio is /dev/null so it
+        # can't block on our pipes. We intentionally drop the Popen handle.
+        subprocess.Popen(
+            [sys.executable or "python3", str(heal_py), "auto-heal-trigger"],
+            stdin=devnull,
+            stdout=devnull,
+            stderr=devnull,
+            start_new_session=True,
+            close_fds=True,
+            env=env,
+        )
+    except (OSError, ValueError):
+        # subprocess.Popen can raise on EAGAIN, E2BIG, exec failure, etc.
+        # The hook never propagates these.
+        pass
+    finally:
+        try:
+            devnull.close()
+        except OSError:
+            pass
+
+
+def _maybe_trigger_auto_heal() -> None:
+    """Check the auto-heal threshold and spawn a trigger if it's exceeded.
+
+    Called after every successful activity.jsonl append. All exceptions are
+    swallowed -- the hook MUST NEVER crash Claude Code (see invariant at
+    top of file).
+    """
+    try:
+        activity_path = _activity_path()
+        if not activity_path.exists():
+            return
+        offset = _read_last_heal_offset()
+        count = _count_entries_since_offset(activity_path, offset)
+        if count < AUTO_HEAL_THRESHOLD:
+            return
+        if _heal_in_progress():
+            # Another heal is already running -- it'll reset the counter
+            # when it finishes. Don't double-trigger.
+            return
+        _spawn_heal_trigger()
+    except Exception:
+        # Defensive: any unexpected failure must not crash the hook.
+        return
+
+
 def main() -> int:
     """Hook entry point. Always returns 0; never raises."""
     try:
@@ -200,6 +428,7 @@ def main() -> int:
         record = _build_record(event, cwd)
         payload = _serialize_capped(record)
         _append_line(_activity_path(), payload)
+        _maybe_trigger_auto_heal()
     except Exception:
         # Hook MUST NEVER crash Claude Code.
         return 0

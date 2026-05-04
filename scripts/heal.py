@@ -72,6 +72,14 @@ PERSONA_SUBDIR = "persona"
 ANECDOTES_SUBDIR = "anecdotes"
 ROOT_DIR_NAME = ".ai-quickstart"
 
+# Auto-heal threshold trigger state files (lane-p). The hook_runner counts
+# activity.jsonl entries since the byte offset recorded here, and resets
+# the offset on successful heal write. The .heal-pending sentinel is
+# written by the detached trigger subprocess and consumed by the next
+# interactive /ai-quickstart pipeline.
+LAST_HEAL_STATE_FILE = ".last-heal.json"
+HEAL_PENDING_FILE = ".heal-pending"
+
 # Max bytes per heal-errors.jsonl line so POSIX appends stay atomic
 # (matches the activity.jsonl invariant from PLAN.md).
 MAX_ERROR_LINE_BYTES = 4096
@@ -123,6 +131,16 @@ def _heal_lock_path(home: Optional[Path] = None) -> Path:
 
 def _heal_errors_path(home: Optional[Path] = None) -> Path:
     return _home_root(home) / HEAL_ERRORS_FILE
+
+
+def _last_heal_state_path(home: Optional[Path] = None) -> Path:
+    """Auto-heal threshold state: byte offset of activity.jsonl at last heal."""
+    return _persona_dir(home) / LAST_HEAL_STATE_FILE
+
+
+def _heal_pending_path(home: Optional[Path] = None) -> Path:
+    """Sentinel marker dropped by the auto-heal trigger subprocess."""
+    return _persona_dir(home) / HEAL_PENDING_FILE
 
 
 def _ensure_persona_dirs(home: Optional[Path] = None) -> None:
@@ -335,6 +353,73 @@ def _read_activity_summary(home: Optional[Path] = None) -> Dict[str, Any]:
         return json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return {}
+
+
+# ---------- auto-heal threshold state (lane-p) ----------
+
+def _record_last_heal_offset(home: Optional[Path] = None) -> None:
+    """Record the current byte size of activity.jsonl as the new "last heal"
+    offset. Called from the heal write success path to reset the
+    auto-heal counter. Best-effort: any failure is logged to heal-errors
+    by the caller, but this helper itself never raises so a botched
+    counter-reset doesn't fail an otherwise-successful heal.
+    """
+    try:
+        act_path = _activity_path(home)
+        if act_path.exists():
+            offset = act_path.stat().st_size
+        else:
+            offset = 0
+        state = {"offset": offset, "ts": _utcnow_iso()}
+        state_path = _last_heal_state_path(home)
+        state_path.parent.mkdir(parents=True, exist_ok=True)
+        # Atomic via tmp+replace so a crash mid-write can't leave a half
+        # file (which _read would just treat as offset 0 anyway, but
+        # cleaner to be tidy).
+        _atomic_write_text(
+            state_path,
+            json.dumps(state, ensure_ascii=False) + "\n",
+        )
+    except OSError:
+        # Best-effort: failure to record the offset just means the next
+        # threshold check will compare against a stale value. The heal
+        # itself succeeded; that's what matters.
+        pass
+
+
+def _clear_heal_pending_sentinel(home: Optional[Path] = None) -> None:
+    """Remove the .heal-pending sentinel after a successful heal write.
+
+    Best-effort: missing file is fine, permission errors swallowed. This
+    keeps the sentinel from triggering a redundant heal on the very next
+    /ai-quickstart invocation.
+    """
+    try:
+        path = _heal_pending_path(home)
+        if path.exists():
+            path.unlink()
+    except OSError:
+        pass
+
+
+def _write_heal_pending_sentinel(home: Optional[Path] = None) -> None:
+    """Write the .heal-pending sentinel marker.
+
+    Called by the ``auto-heal-trigger`` subcommand spawned (detached) from
+    the PostToolUse hook when the activity log crosses the auto-heal
+    threshold. The presence of the file signals the next interactive
+    /ai-quickstart pipeline to run a heal. Content is informational only.
+    """
+    payload = {
+        "ts": _utcnow_iso(),
+        "reason": "auto-heal-threshold",
+    }
+    path = _heal_pending_path(home)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    _atomic_write_text(
+        path,
+        json.dumps(payload, ensure_ascii=False) + "\n",
+    )
 
 
 # ---------- anecdotes reading ----------
@@ -582,6 +667,13 @@ def cmd_write(
         else:
             err.write("[heal] no prose changes\n")
 
+        # Auto-heal threshold (lane-p): record the current activity.jsonl
+        # byte offset so the hook's "entries since last heal" counter
+        # resets, and clear the .heal-pending sentinel if any. Both are
+        # best-effort -- the heal itself has already succeeded.
+        _record_last_heal_offset(home)
+        _clear_heal_pending_sentinel(home)
+
         # Echo a tiny summary on stdout so callers know it succeeded.
         summary = {
             "ok": True,
@@ -803,6 +895,53 @@ def _aggregate_archives(archive_paths: List[Path]) -> Dict[str, Any]:
     }
 
 
+# ---------- subcommand: auto-heal-trigger (lane-p) ----------
+
+def cmd_auto_heal_trigger(
+    home: Optional[Path] = None,
+    stdout=None,
+    stderr=None,
+) -> int:
+    """Drop the .heal-pending sentinel so the next /ai-quickstart heals.
+
+    Spawned (detached) by the PostToolUse hook when activity.jsonl crosses
+    the auto-heal threshold. Intentionally minimal:
+
+      * Does NOT acquire the heal lock -- a full heal needs LLM synthesis,
+        which only the interactive /ai-quickstart pipeline can drive.
+      * Does NOT mutate activity.jsonl or persona.md.
+      * Just writes a small JSON sentinel file. The next interactive
+        invocation reads the sentinel, runs heal, and the heal's success
+        path clears the sentinel + resets the counter offset.
+
+    Always writes a JSON status line to stdout so callers can sanity-check.
+    Errors log to heal-errors.jsonl and exit non-zero.
+    """
+    out = stdout if stdout is not None else sys.stdout
+    err = stderr if stderr is not None else sys.stderr
+    try:
+        _ensure_persona_dirs(home)
+        _write_heal_pending_sentinel(home)
+        out.write(
+            json.dumps(
+                {"ok": True, "sentinel": str(_heal_pending_path(home))},
+                ensure_ascii=False,
+            )
+            + "\n"
+        )
+        out.flush()
+        return 0
+    except Exception as exc:  # pylint: disable=broad-except
+        _log_heal_error(
+            phase="auto-heal-trigger",
+            error=repr(exc),
+            tb_first_line=_first_traceback_line(exc),
+            home=home,
+        )
+        err.write(f"heal auto-heal-trigger failed: {exc}\n")
+        return 1
+
+
 # ---------- argparse wiring ----------
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -811,7 +950,8 @@ def _build_parser() -> argparse.ArgumentParser:
         description=(
             "Persona heal CLI: prepare-context (read+lock), write "
             "(accept new prose, atomic write+diff), rotate (weekly/monthly "
-            "activity.jsonl maintenance)."
+            "activity.jsonl maintenance), auto-heal-trigger (drop pending "
+            "sentinel)."
         ),
     )
     sub = parser.add_subparsers(dest="cmd", required=True, metavar="SUBCOMMAND")
@@ -844,6 +984,15 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Rotate activity.jsonl weekly; aggregate archives monthly",
     )
 
+    sub.add_parser(
+        "auto-heal-trigger",
+        help=(
+            "Drop the .heal-pending sentinel marker. Spawned detached by "
+            "the PostToolUse hook when activity.jsonl crosses the auto-heal "
+            "threshold; not normally invoked by users."
+        ),
+    )
+
     return parser
 
 
@@ -856,6 +1005,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         return cmd_write(prose_file=args.prose_file, activity_json=args.activity_json)
     if args.cmd == "rotate":
         return cmd_rotate()
+    if args.cmd == "auto-heal-trigger":
+        return cmd_auto_heal_trigger()
     parser.print_help(sys.stderr)
     return 2
 
