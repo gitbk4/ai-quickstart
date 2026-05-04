@@ -1,0 +1,342 @@
+{
+  "version": 1,
+  "description": "LLM eval for Step-2 deeper-interview output quality. Given Step-1 entry answers + archetype, the deeper interview must probe ambiguity, surface concrete project ideas, stay on-archetype, and avoid repeating the entry questions.",
+  "judge_model": "claude-haiku",
+  "pass_threshold": 0.8,
+  "cases": [
+    {
+      "name": "developer-vague-productivity-goal",
+      "input": {
+        "archetype": "job",
+        "entry_answers": {
+          "archetype": "job",
+          "role": "backend developer",
+          "industry": "fintech",
+          "top_problems": [
+            "want to use AI to be more productive"
+          ],
+          "desired_outcomes": [
+            "faster shipping"
+          ],
+          "skill_tolerance": "permissive",
+          "project_style": "minimal",
+          "coding_languages": [
+            "python",
+            "go"
+          ],
+          "freeform_notes": ""
+        }
+      },
+      "expectations": [
+        "deeper interview pushes back on the vague 'be more productive' framing and asks for a specific weekly task or bottleneck",
+        "deeper interview does not simply repeat the 3 entry questions (archetype/role/industry)",
+        "deeper interview asks at least one question grounded in the user's stated languages (python/go) or fintech domain",
+        "deeper interview surfaces at least one concrete candidate project idea or workflow rather than abstract themes",
+        "deeper interview output stays under ~600 words"
+      ]
+    },
+    {
+      "name": "researcher-paper-firehose",
+      "input": {
+        "archetype": "job",
+        "entry_answers": {
+          "archetype": "job",
+          "role": "ML researcher",
+          "industry": "ai-research",
+          "top_problems": [
+            "drowning in arxiv papers, can't keep up with what's relevant to my subfield"
+          ],
+          "desired_outcomes": [
+            "a daily filtered reading list scoped to RLHF and reward modeling"
+          ],
+          "skill_tolerance": "strict",
+          "project_style": "full",
+          "coding_languages": [
+            "python"
+          ],
+          "freeform_notes": "I read with notes; throwaway summaries don't help."
+        }
+      },
+      "expectations": [
+        "deeper interview probes how the user currently triages papers (e.g., source feeds, time budget, what 'relevant' means here)",
+        "deeper interview proposes or asks about a concrete artifact (e.g., daily digest, scored queue) and confirms shape with the user",
+        "deeper interview honors the strict skill_tolerance signal and avoids suggesting kitchen-sink agent stacks",
+        "deeper interview does not invent details about the user's employer or specific arxiv lists not given in input",
+        "deeper interview stays on the researcher archetype (no startup-founder framing)"
+      ]
+    },
+    {
+      "name": "pm-cross-team-coordination",
+      "input": {
+        "archetype": "job",
+        "entry_answers": {
+          "archetype": "job",
+          "role": "senior product manager",
+          "industry": "consumer saas",
+          "top_problems": [
+            "spec drafts take 2 weeks because eng and design feedback arrives late",
+            "weekly status updates eat my Friday afternoon"
+          ],
+          "desired_outcomes": [
+            "ship specs in days not weeks",
+            "auto-draft a weekly status from Linear and Slack"
+          ],
+          "skill_tolerance": "permissive",
+          "project_style": "minimal",
+          "coding_languages": [],
+          "freeform_notes": "I don't really code; I can run a CLI but won't maintain TypeScript."
+        }
+      },
+      "expectations": [
+        "deeper interview respects the no-coding constraint and frames suggestions around CLI/automation, not custom apps",
+        "deeper interview asks about the spec drafting workflow concretely (where feedback lives, who reviews, what's the sticking point)",
+        "deeper interview names at least one of the two stated problems back to the user when probing for detail",
+        "deeper interview avoids suggesting that the PM build agentic pipelines from scratch in Python",
+        "deeper interview does not repeat the entry questions verbatim"
+      ]
+    },
+    {
+      "name": "nonprofit-development-grant-writing",
+      "input": {
+        "archetype": "job",
+        "entry_answers": {
+          "archetype": "job",
+          "role": "development director",
+          "industry": "industry-nonprofit-development",
+          "top_problems": [
+            "grant writing eats every Friday",
+            "donor research is scattered across spreadsheets and PDFs"
+          ],
+          "desired_outcomes": [
+            "cut grant draft cycle from 3 weeks to 1"
+          ],
+          "skill_tolerance": "permissive",
+          "project_style": "minimal",
+          "coding_languages": [],
+          "freeform_notes": "Small org, two-person dev team."
+        }
+      },
+      "expectations": [
+        "deeper interview uses nonprofit vocabulary (grants, donors, funders, RFPs) and avoids commercial customer/user framing",
+        "deeper interview asks where the friction in the grant cycle actually lives (research vs drafting vs review vs submission)",
+        "deeper interview surfaces a concrete candidate workflow (e.g., funder profile assistant, LOI template) rather than vague 'AI for nonprofits' framing",
+        "deeper interview respects the 'two-person team' note and does not propose a 6-month engineering build",
+        "deeper interview does not invent funder or grant names not present in the input"
+      ]
+    },
+    {
+      "name": "content-creator-consistency",
+      "input": {
+        "archetype": "personal",
+        "entry_answers": {
+          "archetype": "personal",
+          "role": "youtube creator",
+          "industry": "education",
+          "top_problems": [
+            "videos slip 2-3 weeks past my schedule",
+            "I rewrite the same kind of intro every time"
+          ],
+          "desired_outcomes": [
+            "publish weekly without missing",
+            "a personal style guide I can actually reuse"
+          ],
+          "skill_tolerance": "permissive",
+          "project_style": "minimal",
+          "coding_languages": [
+            "python"
+          ],
+          "freeform_notes": "Solo channel, ~20k subs, math + ML explainer videos."
+        }
+      },
+      "expectations": [
+        "deeper interview reflects the personal archetype (solo creator tone), not a media-company workflow",
+        "deeper interview probes the video production pipeline concretely (script vs edit vs thumbnail vs publish — where does it stall?)",
+        "deeper interview engages with the style-guide goal as a reusable artifact rather than a one-off doc",
+        "deeper interview does not invent collaborators, sponsors, or platforms beyond YouTube",
+        "deeper interview output is concrete enough that a Step-3 suggestion engine could shortlist 2-3 projects"
+      ]
+    },
+    {
+      "name": "exploring-no-prior-projects",
+      "input": {
+        "archetype": "exploring",
+        "entry_answers": {
+          "archetype": "exploring",
+          "role": "",
+          "industry": "",
+          "top_problems": [
+            "not sure where to start with AI projects"
+          ],
+          "desired_outcomes": [
+            "pick a first project I'd actually finish"
+          ],
+          "skill_tolerance": "permissive",
+          "project_style": "minimal",
+          "coding_languages": [],
+          "freeform_notes": "Curious; not a working dev day-to-day."
+        }
+      },
+      "expectations": [
+        "deeper interview acknowledges the user is exploring and does not assume a job context",
+        "deeper interview asks at least one question to help the user generate candidate domains (hobbies, daily annoyances, recent curiosities) rather than picking one for them",
+        "deeper interview avoids prescribing a specific tech stack before the user has named a problem",
+        "deeper interview surfaces the 'something I'd actually finish' constraint when shaping follow-ups",
+        "deeper interview output stays under ~600 words"
+      ]
+    },
+    {
+      "name": "nonprofit-programs-impact-reporting",
+      "input": {
+        "archetype": "job",
+        "entry_answers": {
+          "archetype": "job",
+          "role": "program manager",
+          "industry": "industry-nonprofit-programs",
+          "top_problems": [
+            "impact reports take 6 weeks because data lives in 4 systems",
+            "beneficiary stories never make it from intake notes to board reports"
+          ],
+          "desired_outcomes": [
+            "monthly impact snapshot with consistent metrics"
+          ],
+          "skill_tolerance": "strict",
+          "project_style": "minimal",
+          "coding_languages": [
+            "python"
+          ],
+          "freeform_notes": ""
+        }
+      },
+      "expectations": [
+        "deeper interview uses program/beneficiary language, not customer/user language",
+        "deeper interview probes the 4-systems data fragmentation concretely (which systems? what's the bottleneck — extraction, joining, formatting?)",
+        "deeper interview engages with the beneficiary-story pipeline goal and asks how consent/intake-note handling works today",
+        "deeper interview honors the strict skill_tolerance and project_style=minimal signals",
+        "deeper interview does not invent specific systems (e.g., Salesforce, Airtable) the user didn't name"
+      ]
+    },
+    {
+      "name": "indie-game-dev-narrow-scope",
+      "input": {
+        "archetype": "personal",
+        "entry_answers": {
+          "archetype": "personal",
+          "role": "hobbyist game developer",
+          "industry": "",
+          "top_problems": [
+            "I keep starting roguelikes and never finish them"
+          ],
+          "desired_outcomes": [
+            "actually ship one small game in 2026"
+          ],
+          "skill_tolerance": "permissive",
+          "project_style": "minimal",
+          "coding_languages": [
+            "rust",
+            "typescript"
+          ],
+          "freeform_notes": "Weekends only."
+        }
+      },
+      "expectations": [
+        "deeper interview treats this as a personal/hobby context (no employer assumed)",
+        "deeper interview probes why prior projects stalled (scope, motivation, tooling, feedback loop) rather than skipping straight to recommendations",
+        "deeper interview surfaces a concrete shape for 'one small game' (jam-sized? specific scope cap?) without dictating it",
+        "deeper interview does not propose AI tooling that conflicts with weekends-only time budget",
+        "deeper interview output is under ~600 words and ends with the user having something specific to react to"
+      ]
+    },
+    {
+      "name": "data-scientist-archetype-mismatch",
+      "input": {
+        "archetype": "job",
+        "entry_answers": {
+          "archetype": "job",
+          "role": "data scientist",
+          "industry": "biotech",
+          "top_problems": [
+            "want to build a voice-cloning agent app"
+          ],
+          "desired_outcomes": [
+            "a cool side project to show recruiters"
+          ],
+          "skill_tolerance": "permissive",
+          "project_style": "full",
+          "coding_languages": [
+            "python"
+          ],
+          "freeform_notes": ""
+        }
+      },
+      "expectations": [
+        "deeper interview surfaces the gap between the stated job (biotech data scientist) and the stated goal (voice-cloning side project) with one direct question",
+        "deeper interview does not flatter the buzzy goal; asks the user to name the underlying workflow or motivation",
+        "deeper interview considers whether the 'show recruiters' frame implies portfolio over product and probes that explicitly",
+        "deeper interview does not assume biotech context for the side project unless the user confirms it",
+        "deeper interview stays direct and avoids hedging language"
+      ]
+    },
+    {
+      "name": "founder-positioning-ambiguity",
+      "input": {
+        "archetype": "job",
+        "entry_answers": {
+          "archetype": "job",
+          "role": "solo founder",
+          "industry": "saas",
+          "top_problems": [
+            "nail product positioning",
+            "talk to users without burning my whole week"
+          ],
+          "desired_outcomes": [
+            "a one-line pitch I'd say out loud",
+            "5 user calls per week without it being my whole job"
+          ],
+          "skill_tolerance": "permissive",
+          "project_style": "full",
+          "coding_languages": [
+            "typescript"
+          ],
+          "freeform_notes": "Pre-launch, no customers yet."
+        }
+      },
+      "expectations": [
+        "deeper interview engages with both stated goals (positioning AND user calls) — does not silently drop one",
+        "deeper interview probes 'positioning' concretely (audience? wedge? what hypothesis are they testing?) instead of accepting the buzzword",
+        "deeper interview asks how user calls are sourced today and where the 'whole week' goes (recruiting vs scheduling vs synthesis)",
+        "deeper interview surfaces a concrete artifact target (e.g., positioning memo, call note template) rather than vague advice",
+        "deeper interview does not invent customers, segments, or product features the user didn't state"
+      ]
+    },
+    {
+      "name": "tech-lead-team-bottlenecks",
+      "input": {
+        "archetype": "job",
+        "entry_answers": {
+          "archetype": "job",
+          "role": "tech lead",
+          "industry": "edtech",
+          "top_problems": [
+            "team blocks on me for code review and architecture sign-off"
+          ],
+          "desired_outcomes": [
+            "fewer interrupts per day, faster team velocity"
+          ],
+          "skill_tolerance": "permissive",
+          "project_style": "minimal",
+          "coding_languages": [
+            "typescript"
+          ],
+          "freeform_notes": "Team of 6 engineers, mid-stage startup."
+        }
+      },
+      "expectations": [
+        "deeper interview probes the bottleneck specifically (review queue? RFC backlog? Slack interrupts?) rather than treating 'unblock team' as one thing",
+        "deeper interview asks at least one question about whether the goal is to delegate, automate, or change process — these have different solutions",
+        "deeper interview surfaces a concrete candidate (e.g., a review-triage assistant, an RFC template) tied back to the stated friction",
+        "deeper interview honors the project_style=minimal signal and does not pitch a months-long internal-tools build",
+        "deeper interview output is concrete enough that a Step-3 suggestion engine has real signal to work from"
+      ]
+    }
+  ]
+}
