@@ -554,3 +554,178 @@ def test_heal_error_log_swallows_failures(home: Path, monkeypatch):
     monkeypatch.setattr("builtins.open", selective_open)
     # Should not raise.
     heal._log_heal_error(phase="test", error="x", tb_first_line="frame", home=home)
+
+
+# ---------- locked paragraphs (lane-q) ----------
+
+def _seed_persona_with_locks(home: Path, prose: str) -> None:
+    """Like _seed_persona but lets the caller supply prose verbatim."""
+    fm = persona.default_persona()
+    fm["identity"]["role"] = "tester"
+    persona.write_persona(_persona_path(home), fm, prose)
+
+
+def test_prepare_context_emits_locked_paragraph_fields(home: Path):
+    """prepare-context must surface stripped prose + the locked segments."""
+    prose = (
+        "intro paragraph.\n\n"
+        f"{persona.LOCK_START}\nframed quote stays.\n{persona.LOCK_END}\n\n"
+        "outro paragraph.\n"
+    )
+    _seed_persona_with_locks(home, prose)
+    out = io.StringIO()
+    err = io.StringIO()
+    rc = heal.cmd_prepare_context(stdout=out, stderr=err)
+    assert rc == 0, err.getvalue()
+    payload = json.loads(out.getvalue())
+    assert payload["locked_paragraph_count"] == 1
+    assert len(payload["locked_paragraphs"]) == 1
+    assert "framed quote stays." in payload["locked_paragraphs"][0]
+    # rewritable_prose has the verbatim content stripped out.
+    assert "framed quote stays." not in payload["rewritable_prose"]
+    # current_prose still has it (unchanged input copy).
+    assert "framed quote stays." in payload["current_prose"]
+
+
+def test_write_preserves_locked_paragraph_byte_for_byte(home: Path):
+    """A locked paragraph must round-trip identically through heal write."""
+    locked_block = (
+        f"{persona.LOCK_START}\n"
+        "I started Compathy in 2024 because note-taking apps lost my context.\n"
+        f"{persona.LOCK_END}"
+    )
+    prose = f"intro paragraph.\n\n{locked_block}\n\noutro paragraph.\n"
+    _seed_persona_with_locks(home, prose)
+
+    # Simulate Claude returning a rewrite that DROPPED the locked content.
+    new_prose = "rewritten intro.\n\nrewritten outro.\n"
+    out = io.StringIO()
+    err = io.StringIO()
+    rc = heal.cmd_write(stdin=io.StringIO(new_prose), stdout=out, stderr=err)
+    assert rc == 0, err.getvalue()
+
+    final = persona.parse_persona(_persona_path(home))["prose"]
+    # The locked block survives byte-for-byte.
+    assert locked_block in final
+    # The diff annotation reports preservation.
+    assert "preserved 1 locked paragraph" in err.getvalue()
+    summary = json.loads(out.getvalue())
+    assert summary["preserved_locked_count"] == 1
+
+
+def test_write_only_unlocked_content_can_change(home: Path):
+    """Locked paragraph survives intact even when adjacent unlocked content is rewritten."""
+    locked_block = (
+        f"{persona.LOCK_START}\n"
+        "Identity claim: I am a sociologist who codes on weekends.\n"
+        f"{persona.LOCK_END}"
+    )
+    old_prose = (
+        "I have been writing software for fifteen years.\n\n"
+        f"{locked_block}\n\n"
+        "I prefer Python for prototyping and Rust for systems work.\n"
+    )
+    _seed_persona_with_locks(home, old_prose)
+
+    # Simulate Claude rewriting the unlocked sentences only (and dropping the
+    # placeholder, which is the worst-case for restoration).
+    new_prose = (
+        "Has been shipping production software for over a decade.\n\n"
+        "Prefers TypeScript on the frontend and Go on the backend.\n"
+    )
+    out = io.StringIO()
+    err = io.StringIO()
+    rc = heal.cmd_write(stdin=io.StringIO(new_prose), stdout=out, stderr=err)
+    assert rc == 0, err.getvalue()
+
+    final = persona.parse_persona(_persona_path(home))["prose"]
+    # Locked content is byte-for-byte the same.
+    assert locked_block in final
+    assert "I am a sociologist who codes on weekends." in final
+    # Unlocked content was changed.
+    assert "fifteen years" not in final
+    assert "shipping production software" in final
+    assert "TypeScript on the frontend" in final
+    # No bleed of original unlocked text into the new file.
+    assert "I prefer Python for prototyping" not in final
+
+
+def test_write_no_locked_count_when_none(home: Path):
+    """preserved_locked_count is zero (and no annotation) when no locks present."""
+    _seed_persona(home, prose="some plain prose without lock markers.\n")
+    out = io.StringIO()
+    err = io.StringIO()
+    rc = heal.cmd_write(stdin=io.StringIO("rewritten plain prose.\n"), stdout=out, stderr=err)
+    assert rc == 0, err.getvalue()
+    summary = json.loads(out.getvalue())
+    assert summary["preserved_locked_count"] == 0
+    # The "preserved N locked paragraph(s)" annotation is suppressed.
+    assert "preserved" not in err.getvalue()
+    assert "locked paragraph" not in err.getvalue()
+
+
+def test_write_handles_unclosed_lock_marker_gracefully(home: Path, capsys):
+    """Malformed (unclosed) lock marker -> warn + treat as unlocked."""
+    # Persona with a lock-start but no matching lock-end.
+    bad_prose = (
+        "intro paragraph.\n\n"
+        f"{persona.LOCK_START}\nstart of a quote\n"
+        "but the closing marker was never written.\n"
+    )
+    _seed_persona_with_locks(home, bad_prose)
+    new_prose = "totally rewritten content.\n"
+    out = io.StringIO()
+    rc = heal.cmd_write(stdin=io.StringIO(new_prose), stdout=out)
+    # Heal still succeeds — malformed marker is treated as unlocked.
+    captured = capsys.readouterr()
+    assert rc == 0, captured.err
+    summary = json.loads(out.getvalue())
+    # Nothing was preserved as locked.
+    assert summary["preserved_locked_count"] == 0
+    final = persona.parse_persona(_persona_path(home))["prose"]
+    assert "totally rewritten content." in final
+    # A warning was emitted to stderr (extract_locked_segments uses sys.stderr
+    # directly, which capsys captures).
+    assert "unclosed" in captured.err.lower() or "lock" in captured.err.lower()
+
+
+def test_write_preserves_locks_when_llm_keeps_originals(home: Path):
+    """If the LLM keeps the original lock blocks verbatim, restoration is a no-op."""
+    locked_block = (
+        f"{persona.LOCK_START}\n"
+        "Anchor identity sentence.\n"
+        f"{persona.LOCK_END}"
+    )
+    old_prose = f"a.\n\n{locked_block}\n\nb.\n"
+    _seed_persona_with_locks(home, old_prose)
+
+    # Claude returns the rewrite WITH the original lock block already pasted in.
+    new_prose = f"new a.\n\n{locked_block}\n\nnew b.\n"
+    out = io.StringIO()
+    err = io.StringIO()
+    rc = heal.cmd_write(stdin=io.StringIO(new_prose), stdout=out, stderr=err)
+    assert rc == 0, err.getvalue()
+    summary = json.loads(out.getvalue())
+    assert summary["preserved_locked_count"] == 1
+    final = persona.parse_persona(_persona_path(home))["prose"]
+    assert locked_block in final
+    # Lock markers are not duplicated.
+    assert final.count(persona.LOCK_START) == 1
+    assert final.count(persona.LOCK_END) == 1
+
+
+def test_write_diff_surfaces_preserved_locked_count(home: Path):
+    """The diff display block on stderr must surface preserved-locked count."""
+    locked_block = (
+        f"{persona.LOCK_START}\nFrozen.\n{persona.LOCK_END}"
+    )
+    prose = f"old intro.\n\n{locked_block}\n\nold outro.\n"
+    _seed_persona_with_locks(home, prose)
+    new_prose = "new intro.\n\nnew outro.\n"
+    out = io.StringIO()
+    err = io.StringIO()
+    rc = heal.cmd_write(stdin=io.StringIO(new_prose), stdout=out, stderr=err)
+    assert rc == 0
+    err_text = err.getvalue()
+    # Diff annotation lives alongside the unified diff.
+    assert "preserved 1 locked paragraph" in err_text

@@ -459,10 +459,171 @@ def diff_persona(old_prose: str, new_prose: str) -> str:
     return "".join(diff)
 
 
+# ---------- locked-paragraph protocol (lane-q, v2) ----------
+#
+# Mechanism choice: HTML-comment markers wrapping the locked content.
+#
+#     <!-- lock:start -->
+#     This paragraph will not be rewritten by the heal flow.
+#     <!-- lock:end -->
+#
+# Why HTML comments rather than a `locked_sections:` frontmatter list?
+#   1. The persona frontmatter parser is flat-with-one-level-of-nesting only;
+#      adding paragraph IDs or anchor lookups requires either a deeper schema
+#      (rejected by ``_dump_frontmatter``) or duplicating prose verbatim in
+#      frontmatter (which is what we are trying to prevent drift on).
+#   2. HTML comments are valid Markdown and survive every renderer untouched.
+#   3. The lock travels with the prose itself, so reordering paragraphs cannot
+#      orphan a lock.
+#   4. The user (or the LLM during interview) can hand-edit the markers in any
+#      text editor with zero tooling.
+#
+# Public API:
+#   * ``LOCK_START`` / ``LOCK_END`` — the literal marker strings.
+#   * ``extract_locked_segments(prose)`` -> list of ``{"start", "end", "text"}``
+#     dicts giving each locked region's character offsets and verbatim body.
+#   * ``strip_locks_for_rewrite(prose)`` -> ``(stripped, segments)`` where
+#     ``stripped`` replaces each locked region with a single placeholder line
+#     so the LLM sees a structured "do not touch" hint without the original
+#     text being a candidate for paraphrasing.
+#   * ``restitch_locks(rewritten, segments)`` -> ``(final_prose, restored)``
+#     puts the verbatim locked segments back where the placeholders sit.
+#     ``restored`` is the count of segments successfully re-stitched (matches
+#     ``len(segments)`` on the happy path; less if the LLM dropped placeholders).
+#   * ``locked_paragraph_count(prose)`` -> int convenience wrapper.
+
+LOCK_START = "<!-- lock:start -->"
+LOCK_END = "<!-- lock:end -->"
+# A unique-looking placeholder we can scan for after the LLM rewrite.
+# Indexed (``{i}``) so we can correlate placeholders with their originals if
+# the LLM reorders or drops some.
+_LOCK_PLACEHOLDER_FMT = "<!-- ai-quickstart:locked-paragraph #{i} -->"
+
+
+def _placeholder_for(index: int) -> str:
+    return _LOCK_PLACEHOLDER_FMT.format(i=index)
+
+
+def extract_locked_segments(prose: str) -> List[Dict[str, Any]]:
+    """Return the verbatim locked segments in ``prose`` in document order.
+
+    Each segment dict has::
+
+        {"start": int, "end": int, "text": str}
+
+    where ``start`` and ``end`` are character offsets pointing at the
+    ``LOCK_START`` and the character just past ``LOCK_END`` respectively, and
+    ``text`` is the full lock block including its markers (so re-stitching
+    restores the markers verbatim).
+
+    Malformed (unclosed) markers are tolerated: a ``LOCK_START`` with no
+    matching ``LOCK_END`` is logged to stderr and the segment is dropped
+    (treated as unlocked). This mirrors the codebase's existing "malformed
+    frontmatter -> warn + fall back" handler.
+    """
+    segments: List[Dict[str, Any]] = []
+    if not prose or LOCK_START not in prose:
+        return segments
+    cursor = 0
+    while True:
+        s_idx = prose.find(LOCK_START, cursor)
+        if s_idx == -1:
+            break
+        e_idx = prose.find(LOCK_END, s_idx + len(LOCK_START))
+        if e_idx == -1:
+            sys.stderr.write(
+                "[persona] warning: unclosed lock marker at offset "
+                f"{s_idx}; treating as unlocked\n"
+            )
+            break
+        end = e_idx + len(LOCK_END)
+        segments.append({"start": s_idx, "end": end, "text": prose[s_idx:end]})
+        cursor = end
+    return segments
+
+
+def locked_paragraph_count(prose: str) -> int:
+    """Return how many lock blocks are present in ``prose``."""
+    return len(extract_locked_segments(prose))
+
+
+def strip_locks_for_rewrite(prose: str) -> Tuple[str, List[Dict[str, Any]]]:
+    """Replace each locked block with an indexed placeholder line.
+
+    Returns ``(stripped, segments)`` where ``segments`` matches the result of
+    :func:`extract_locked_segments` on the original prose (so callers can pass
+    it straight to :func:`restitch_locks`). The placeholder line is on its
+    own line and surrounded by blank lines, so the LLM is unlikely to merge
+    it into adjacent paragraphs.
+    """
+    segments = extract_locked_segments(prose)
+    if not segments:
+        return prose, []
+    out: List[str] = []
+    cursor = 0
+    for i, seg in enumerate(segments):
+        out.append(prose[cursor:seg["start"]])
+        out.append(_placeholder_for(i))
+        cursor = seg["end"]
+    out.append(prose[cursor:])
+    return "".join(out), segments
+
+
+def restitch_locks(
+    rewritten: str,
+    segments: List[Dict[str, Any]],
+) -> Tuple[str, int]:
+    """Put verbatim locked segments back where placeholders sit.
+
+    Returns ``(final_prose, restored)``. ``restored`` is the count of segments
+    that were successfully placed (i.e. their placeholder survived in the
+    rewrite). If a placeholder is missing, that segment is appended at the
+    end of the prose so no locked content is silently dropped, and a stderr
+    warning is emitted.
+    """
+    if not segments:
+        return rewritten, 0
+    restored = 0
+    out = rewritten
+    missing: List[Dict[str, Any]] = []
+    for i, seg in enumerate(segments):
+        token = _placeholder_for(i)
+        if token in out:
+            out = out.replace(token, seg["text"], 1)
+            restored += 1
+        else:
+            missing.append(seg)
+    if missing:
+        sys.stderr.write(
+            f"[persona] warning: {len(missing)} locked paragraph placeholder(s) "
+            "missing from rewrite; appending verbatim originals to preserve them\n"
+        )
+        # Append missing segments separated by blank lines, after a marker.
+        suffix_parts: List[str] = []
+        if not out.endswith("\n"):
+            suffix_parts.append("\n")
+        for seg in missing:
+            suffix_parts.append("\n")
+            suffix_parts.append(seg["text"])
+            if not seg["text"].endswith("\n"):
+                suffix_parts.append("\n")
+        out = out + "".join(suffix_parts)
+        # We still count appended-but-rescued segments as restored, since they
+        # are present byte-for-byte in the final prose.
+        restored += len(missing)
+    return out, restored
+
+
 __all__ = [
     "parse_persona",
     "write_persona",
     "append_anecdote",
     "default_persona",
     "diff_persona",
+    "LOCK_START",
+    "LOCK_END",
+    "extract_locked_segments",
+    "locked_paragraph_count",
+    "strip_locks_for_rewrite",
+    "restitch_locks",
 ]
