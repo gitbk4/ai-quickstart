@@ -513,11 +513,22 @@ def cmd_prepare_context(
         activity_recent, malformed = _read_activity_current_week(home, now=now)
         activity_summary = _read_activity_summary(home)
 
+        # lane-q: surface locked-paragraph context so the LLM rewrites only
+        # the unlocked portion of the prose. ``stripped_prose`` is what the
+        # LLM should treat as its input; locked regions are replaced by
+        # indexed placeholder lines that ``cmd_write`` re-stitches verbatim.
+        stripped_prose, locked_segments = persona.strip_locks_for_rewrite(
+            current_prose
+        )
+
         context = {
             "lock_acquired": True,
             "run_id": run_id,
             "current_frontmatter": current_frontmatter,
             "current_prose": current_prose,
+            "rewritable_prose": stripped_prose,
+            "locked_paragraphs": [seg["text"] for seg in locked_segments],
+            "locked_paragraph_count": len(locked_segments),
             "anecdotes": anecdotes,
             "activity_recent": activity_recent,
             "activity_summary": activity_summary,
@@ -643,6 +654,19 @@ def cmd_write(
         old_frontmatter = parsed["frontmatter"]
         old_prose = parsed["prose"]
 
+        # lane-q: re-stitch any locked paragraphs from the prior persona back
+        # into the rewrite. This is additive: when the prior prose has no
+        # locks, ``preserved_locked_count`` is 0 and ``new_prose`` is used
+        # unchanged. When locks exist, we trust the prior file as the source
+        # of truth for the lock contents and restore them verbatim, regardless
+        # of whether the LLM kept the placeholders or already pasted the
+        # originals back in.
+        new_prose, preserved_locked_count = _restitch_locked_paragraphs(
+            old_prose=old_prose,
+            new_prose=new_prose,
+            err=err,
+        )
+
         # Apply caller-supplied activity counter overrides BEFORE write so
         # write_persona's bump (updated_at, version) lands on top of them.
         new_frontmatter = _deep_copy_fm(old_frontmatter)
@@ -667,6 +691,14 @@ def cmd_write(
         else:
             err.write("[heal] no prose changes\n")
 
+        # lane-q: surface the preserved-locked count alongside the diff so
+        # the user sees that locked paragraphs were carried through verbatim.
+        if preserved_locked_count > 0:
+            err.write(
+                f"[heal] preserved {preserved_locked_count} locked "
+                f"paragraph{'s' if preserved_locked_count != 1 else ''}\n"
+            )
+
         # Auto-heal threshold (lane-p): record the current activity.jsonl
         # byte offset so the hook's "entries since last heal" counter
         # resets, and clear the .heal-pending sentinel if any. Both are
@@ -680,6 +712,7 @@ def cmd_write(
             "version": written_version,
             "persona_path": str(ppath),
             "backup_path": str(bak_path) if pre_existing else None,
+            "preserved_locked_count": preserved_locked_count,
         }
         out.write(json.dumps(summary, ensure_ascii=False) + "\n")
         out.flush()
@@ -715,6 +748,48 @@ def _deep_copy_fm(fm: Dict[str, Any]) -> Dict[str, Any]:
         else:
             out[k] = v
     return out
+
+
+# lane-q (v2 "lock this paragraph"): additive helper, kept minimal so the
+# parallel lane-p edits to heal.py don't collide. The helper reads the prior
+# persona's locked segments and re-stitches them into the LLM's rewrite. If
+# the new prose contains placeholder lines (the form emitted by
+# ``prepare-context``'s ``rewritable_prose``), they are replaced with the
+# verbatim originals. If the LLM already pasted the originals back in, the
+# pre-existing markers are detected and we leave them alone. If neither
+# placeholders nor originals appear, ``persona.restitch_locks`` falls back
+# to appending verbatim originals so locked content is never lost.
+def _restitch_locked_paragraphs(
+    old_prose: str,
+    new_prose: str,
+    err,
+) -> Tuple[str, int]:
+    """Return ``(prose_with_locks_restored, preserved_count)``.
+
+    ``preserved_count`` is the number of locked paragraphs that came through
+    the heal byte-for-byte from ``old_prose``.
+    """
+    segments = persona.extract_locked_segments(old_prose)
+    if not segments:
+        return new_prose, 0
+
+    # Case 1: the LLM already restored the original markers verbatim. Trust
+    # the new prose as-is *only* if every original locked segment text is
+    # present in the new prose. (We compare on the segment text, which
+    # includes the markers, so partial paraphrases miss this branch.)
+    if all(seg["text"] in new_prose for seg in segments):
+        return new_prose, len(segments)
+
+    # Case 2: the LLM saw placeholders or dropped the locks. Use the standard
+    # restitch helper, which will replace placeholders or append verbatim
+    # originals as a final safeguard.
+    restored_prose, restored_count = persona.restitch_locks(new_prose, segments)
+    if restored_count != len(segments):  # pragma: no cover - defensive
+        err.write(
+            "[heal] warning: locked-paragraph restoration count mismatch "
+            f"(expected {len(segments)}, restored {restored_count})\n"
+        )
+    return restored_prose, restored_count
 
 
 # ---------- subcommand: rotate ----------

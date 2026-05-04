@@ -339,3 +339,109 @@ def test_parse_partial_frontmatter_fills_defaults(tmp_path: Path):
     assert "goals" in fm and "preferences" in fm
     assert "activity" in fm and "generated" in fm
     assert result["prose"].strip() == "body"
+
+
+# ---------- locked paragraphs (lane-q) ----------
+
+def test_extract_locked_segments_none_when_no_markers():
+    assert persona.extract_locked_segments("plain prose, no locks.\n") == []
+    assert persona.extract_locked_segments("") == []
+
+
+def test_extract_locked_segments_finds_one_block():
+    prose = (
+        "intro paragraph.\n\n"
+        f"{persona.LOCK_START}\nfrozen text.\n{persona.LOCK_END}\n\n"
+        "outro paragraph.\n"
+    )
+    segs = persona.extract_locked_segments(prose)
+    assert len(segs) == 1
+    assert "frozen text." in segs[0]["text"]
+    assert segs[0]["text"].startswith(persona.LOCK_START)
+    assert segs[0]["text"].endswith(persona.LOCK_END)
+
+
+def test_extract_locked_segments_finds_multiple():
+    prose = (
+        f"{persona.LOCK_START}\none\n{persona.LOCK_END}\n\n"
+        "middle\n\n"
+        f"{persona.LOCK_START}\ntwo\n{persona.LOCK_END}\n"
+    )
+    segs = persona.extract_locked_segments(prose)
+    assert len(segs) == 2
+    assert "one" in segs[0]["text"]
+    assert "two" in segs[1]["text"]
+    assert persona.locked_paragraph_count(prose) == 2
+
+
+def test_unclosed_lock_marker_warns_and_drops(capsys):
+    prose = (
+        "before\n\n"
+        f"{persona.LOCK_START}\nno close marker\n"
+        "more text but never closed\n"
+    )
+    segs = persona.extract_locked_segments(prose)
+    captured = capsys.readouterr()
+    # Treated as unlocked: no segments captured.
+    assert segs == []
+    assert "warning" in captured.err.lower()
+    assert "lock" in captured.err.lower()
+
+
+def test_strip_and_restitch_roundtrip_preserves_locks():
+    prose = (
+        "intro.\n\n"
+        f"{persona.LOCK_START}\nfrozen one.\n{persona.LOCK_END}\n\n"
+        "middle.\n\n"
+        f"{persona.LOCK_START}\nfrozen two.\n{persona.LOCK_END}\n\n"
+        "outro.\n"
+    )
+    stripped, segments = persona.strip_locks_for_rewrite(prose)
+    # Stripped form should NOT contain the verbatim lock content.
+    assert "frozen one." not in stripped
+    assert "frozen two." not in stripped
+    assert len(segments) == 2
+
+    # Simulate the LLM rewriting only the unlocked content.
+    rewritten = stripped.replace("intro.", "INTRO!").replace("middle.", "MIDDLE!").replace("outro.", "OUTRO!")
+    final, restored = persona.restitch_locks(rewritten, segments)
+    assert restored == 2
+    # Locked content survives byte-for-byte.
+    assert "frozen one." in final
+    assert "frozen two." in final
+    # Markers are preserved.
+    assert final.count(persona.LOCK_START) == 2
+    assert final.count(persona.LOCK_END) == 2
+    # Unlocked rewrites took effect.
+    assert "INTRO!" in final
+    assert "MIDDLE!" in final
+    assert "OUTRO!" in final
+
+
+def test_restitch_appends_dropped_placeholders(capsys):
+    """If the LLM drops a placeholder, the lock content must still survive."""
+    prose = (
+        "a\n\n"
+        f"{persona.LOCK_START}\nverbatim quote.\n{persona.LOCK_END}\n\n"
+        "b\n"
+    )
+    stripped, segments = persona.strip_locks_for_rewrite(prose)
+    # Simulate the LLM dropping the placeholder line entirely.
+    drop_target = stripped.split("\n")
+    drop_target = [ln for ln in drop_target if "ai-quickstart:locked-paragraph" not in ln]
+    rewritten = "\n".join(drop_target)
+    final, restored = persona.restitch_locks(rewritten, segments)
+    captured = capsys.readouterr()
+    assert restored == 1
+    assert "verbatim quote." in final
+    assert persona.LOCK_START in final
+    assert persona.LOCK_END in final
+    assert "warning" in captured.err.lower()
+    assert "missing" in captured.err.lower()
+
+
+def test_strip_locks_no_op_when_no_locks():
+    prose = "no locks here.\n\nstill no locks.\n"
+    stripped, segments = persona.strip_locks_for_rewrite(prose)
+    assert stripped == prose
+    assert segments == []
