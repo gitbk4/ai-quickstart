@@ -40,10 +40,12 @@ the default test run::
 """
 from __future__ import annotations
 
+import importlib.util
 import os
 import subprocess
 import sys
 from pathlib import Path
+from types import ModuleType
 from typing import Optional, Tuple
 
 import pytest
@@ -61,6 +63,42 @@ COMPATHY_VERSION_FILE = REPO_ROOT / "COMPATHY_VERSION"
 
 # Module-level skip marker: every test in this module is also a contract test.
 pytestmark = pytest.mark.contract
+
+
+def _load_compathy_lint(compathy_scripts: Path) -> ModuleType:
+    """Load compathy's ``lint.py`` in isolation from ai-quickstart's modules.
+
+    Both compathy and ai-quickstart have a top-level ``paths`` module. When
+    other tests run first, ai-quickstart's ``paths`` is cached in
+    ``sys.modules``; compathy's ``lint.py`` does ``from paths import …`` which
+    then resolves to the wrong module and raises ImportError. We side-step the
+    cache by prepending compathy's scripts dir to ``sys.path`` AND evicting
+    any conflicting cached modules for the duration of the import. Modules
+    are restored afterwards so ai-quickstart's own tests aren't affected.
+    """
+    conflict_names = ("paths", "lint")
+    saved: dict[str, Optional[ModuleType]] = {
+        n: sys.modules.pop(n, None) for n in conflict_names
+    }
+    saved_path = list(sys.path)
+    try:
+        sys.path.insert(0, str(compathy_scripts))
+        spec = importlib.util.spec_from_file_location(
+            "compathy_lint", compathy_scripts / "lint.py"
+        )
+        if spec is None or spec.loader is None:
+            raise ImportError(
+                f"could not load compathy lint from {compathy_scripts}"
+            )
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+    finally:
+        sys.path[:] = saved_path
+        for name, prev in saved.items():
+            sys.modules.pop(name, None)
+            if prev is not None:
+                sys.modules[name] = prev
 
 
 def _read_pinned_ref() -> Optional[str]:
@@ -254,12 +292,7 @@ def test_schema_md_has_flat_yaml_frontmatter_compathy_can_parse(
     freshly-scaffolded schema.md without raising.
     """
     root = _require_compathy()
-    compathy_scripts = root / "scripts"
-    if str(compathy_scripts) not in sys.path:
-        sys.path.insert(0, str(compathy_scripts))
-    # Imported lazily so this module still imports cleanly when compathy
-    # is missing (the import itself can fail in that case).
-    import lint as compathy_lint  # type: ignore  # noqa: WPS433
+    compathy_lint = _load_compathy_lint(root / "scripts")
 
     schema_text = (real_scaffold / "context" / "schema.md").read_text(
         encoding="utf-8"
@@ -286,10 +319,7 @@ def test_index_md_frontmatter_parses_via_compathy_parser(
     reads it. If either side drifts, this test catches it.
     """
     root = _require_compathy()
-    compathy_scripts = root / "scripts"
-    if str(compathy_scripts) not in sys.path:
-        sys.path.insert(0, str(compathy_scripts))
-    import lint as compathy_lint  # type: ignore  # noqa: WPS433
+    compathy_lint = _load_compathy_lint(root / "scripts")
 
     text = (real_scaffold / "context" / "wiki" / "index.md").read_text(
         encoding="utf-8"
@@ -316,10 +346,7 @@ def test_log_md_frontmatter_and_init_entry(real_scaffold: Path) -> None:
     chronology assumption.
     """
     root = _require_compathy()
-    compathy_scripts = root / "scripts"
-    if str(compathy_scripts) not in sys.path:
-        sys.path.insert(0, str(compathy_scripts))
-    import lint as compathy_lint  # type: ignore  # noqa: WPS433
+    compathy_lint = _load_compathy_lint(root / "scripts")
 
     text = (real_scaffold / "context" / "wiki" / "log.md").read_text(
         encoding="utf-8"
