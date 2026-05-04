@@ -1,0 +1,166 @@
+{
+  "version": 1,
+  "description": "LLM eval for adversarial prompt file quality (compose_adversarial output).",
+  "judge_model": "claude-haiku",
+  "pass_threshold": 0.8,
+  "advisory_in_ci": true,
+  "advisory_window_days": 30,
+  "cases": [
+    {
+      "name": "developer-vague-productivity-goal",
+      "input": {
+        "prior_step_summary": "User is a senior backend engineer at a series-B startup. Wants to 'use AI to be more productive.' Did not specify a task, frequency, or current pain point. Mentioned Python and Postgres but not which workflows are slow.",
+        "next_step_topic": "Step 2 skill + MCP recommendations for a backend engineer"
+      },
+      "expectations": [
+        "the rendered prompt contains an adversarial framing section that tells the next-step LLM to push back",
+        "the rendered prompt explicitly references the next-step topic ('Step 2 skill + MCP recommendations for a backend engineer')",
+        "the rendered prompt preserves the prior step summary verbatim under a clearly labeled section",
+        "the framing instructs the LLM to refuse vague answers like 'use AI to be more productive'",
+        "the framing instructs the LLM to ask for evidence or concrete examples",
+        "the prompt does not invent specifics (frequency, exact pain point) that the prior summary did not state"
+      ]
+    },
+    {
+      "name": "researcher-contradictory-signals",
+      "input": {
+        "prior_step_summary": "User identifies as an ML research engineer focused on interpretability. But the projects they listed are all data-pipeline ETL work in Airflow. Stated goal: 'publish a paper this year.' No mention of writing, experiments, or collaborators.",
+        "next_step_topic": "Step 2 skill + MCP recommendations for an interpretability researcher"
+      },
+      "expectations": [
+        "the framing instructs the LLM to surface contradictions when role and projects do not line up",
+        "the rendered prompt preserves the verbatim contradiction (interpretability vs ETL) in the prior step context",
+        "the rendered prompt references the next-step topic accurately",
+        "the framing tells the LLM to flag mismatch between stated identity and actual work",
+        "the prompt does not pre-resolve the contradiction or pick a side for the user"
+      ]
+    },
+    {
+      "name": "pm-aspirational-no-anecdotes",
+      "input": {
+        "prior_step_summary": "User is a product manager at a mid-size SaaS. Said: 'I want to ship features faster and reduce alignment overhead with engineering.' No specific feature, no specific friction, no examples of past launches.",
+        "next_step_topic": "Step 2 skill + MCP recommendations for a product manager"
+      },
+      "expectations": [
+        "the framing instructs the LLM to refuse aspirational answers without specifics",
+        "the framing instructs the LLM to ask for the specific task and frequency",
+        "the rendered prompt preserves the user's stated goal verbatim",
+        "the rendered prompt references the next-step topic for a product manager",
+        "the framing prefers fewer concrete recommendations over many hedged ones"
+      ]
+    },
+    {
+      "name": "nonprofit-grant-writer-realistic-goal",
+      "input": {
+        "prior_step_summary": "User is a development director at a small literacy nonprofit. Concrete goal: 'cut grant draft time from 3 weeks to 1 week.' Has 5 active funders, drafts roughly 2 grants per month, no engineering background, uses Google Docs.",
+        "next_step_topic": "Step 2 skill + MCP recommendations for a nonprofit development director"
+      },
+      "expectations": [
+        "the framing is preserved even when the prior summary is already concrete",
+        "the rendered prompt preserves the 3-week-to-1-week goal verbatim",
+        "the rendered prompt references the nonprofit development director topic",
+        "the framing does not condescend or assume the user is technical",
+        "the prompt does not invent funder names or grant volumes beyond what was stated",
+        "the framing leaves room to flag if no good skill/MCP fits a non-coder workflow"
+      ]
+    },
+    {
+      "name": "content-creator-tool-fishing",
+      "input": {
+        "prior_step_summary": "User is a YouTube creator (350k subs, tech reviews). Asked: 'what AI tools should I use?' No stated workflow problem. Mentioned editing in DaVinci Resolve, scripts in Notion, no current bottleneck.",
+        "next_step_topic": "Step 2 skill + MCP recommendations for a YouTube content creator"
+      },
+      "expectations": [
+        "the framing instructs the LLM to refuse the open-ended 'what tools should I use' framing without a stated problem",
+        "the framing tells the LLM to ask for the current pain point or bottleneck",
+        "the rendered prompt preserves the creator context (YouTube, tech reviews) verbatim",
+        "the rendered prompt references the YouTube content creator topic",
+        "the prompt does not invent a workflow problem that the user did not mention"
+      ]
+    },
+    {
+      "name": "exploring-empty-prior-context",
+      "input": {
+        "prior_step_summary": "",
+        "next_step_topic": "Step 1 deeper interview for an 'exploring' user"
+      },
+      "expectations": [
+        "the rendered prompt handles empty prior context gracefully (no exception, no garbled output)",
+        "the rendered prompt indicates that no prior context was supplied",
+        "the rendered prompt still includes the adversarial framing block",
+        "the rendered prompt references the Step 1 deeper interview topic",
+        "the framing still tells the LLM to pull concrete facts rather than invent details"
+      ]
+    },
+    {
+      "name": "data-scientist-weak-match-honest",
+      "input": {
+        "prior_step_summary": "User is a data scientist at a healthtech startup. Wants 'something to help me clean lab data faster.' Curated mapping has no skills tagged for lab data cleanup; the closest is a generic data-quality skill.",
+        "next_step_topic": "Step 2 skill + MCP recommendations for a healthtech data scientist"
+      },
+      "expectations": [
+        "the framing instructs the LLM to flag when no good option exists rather than pretending a weak match is strong",
+        "the rendered prompt preserves the lab-data-cleanup goal verbatim",
+        "the rendered prompt references the healthtech data scientist topic",
+        "the framing prefers honest 'no good fit' over a forced recommendation",
+        "the prompt does not pre-recommend the generic skill as if it were a strong match"
+      ]
+    },
+    {
+      "name": "founder-self-described-no-evidence",
+      "input": {
+        "prior_step_summary": "User self-describes as 'technical founder, ex-FAANG.' Building a B2B SaaS in legal tech. Stated goal: 'build the MVP in 6 weeks.' No concrete description of the MVP, no users yet, no specific feature in flight.",
+        "next_step_topic": "Step 2 skill + MCP recommendations for a technical founder"
+      },
+      "expectations": [
+        "the framing instructs the LLM to ask for evidence (concrete examples beat self-description)",
+        "the framing tells the LLM to push for the specific MVP scope and current user signal",
+        "the rendered prompt preserves the founder self-description verbatim",
+        "the rendered prompt references the technical founder topic",
+        "the prompt does not flatter the user or treat the FAANG claim as load-bearing"
+      ]
+    },
+    {
+      "name": "sre-strict-tolerance-on-call-burnout",
+      "input": {
+        "prior_step_summary": "User is a site reliability engineer at a fintech. Top problem: 'reduce on-call burnout, automate post-incident review.' Strict skill tolerance (only well-maintained tools). Uses Python and Go. 2 weeks until on-call rotation hits them again.",
+        "next_step_topic": "Step 3 scaffold plan for an SRE building on-call tooling"
+      },
+      "expectations": [
+        "the rendered prompt preserves the on-call burnout and post-incident review goals verbatim",
+        "the rendered prompt references the Step 3 scaffold plan topic for an SRE",
+        "the framing instructs the LLM to refuse vague answers and demand specifics",
+        "the framing leaves room to flag when no curated option meets strict-tolerance standards",
+        "the prompt does not invent project names that were not stated"
+      ]
+    },
+    {
+      "name": "weekend-hacker-personal-archetype",
+      "input": {
+        "prior_step_summary": "User is a weekend hacker who codes for fun, not for work. Wants 'a small CLI that nags me on rest days for my running training plan.' Strict skill tolerance. Python and Rust. Time budget: ~2 hours per weekend.",
+        "next_step_topic": "Step 3 scaffold plan for a personal-archetype weekend project"
+      },
+      "expectations": [
+        "the rendered prompt preserves the rest-day-nagging goal verbatim",
+        "the rendered prompt references the Step 3 scaffold plan topic for a personal-archetype weekend project",
+        "the framing tone respects the personal/hobbyist context (no enterprise framing forced onto a weekend project)",
+        "the framing instructs the LLM to prefer fewer concrete recommendations over many hedged ones",
+        "the prompt does not invent goals beyond the rest-day nagger CLI"
+      ]
+    },
+    {
+      "name": "consultant-multi-client-context",
+      "input": {
+        "prior_step_summary": "User is an independent AI consultant working across 4 client engagements: two retail (POS analytics), one biotech (lab-notebook search), one media company (content tagging). Wants 'a workflow that lets me switch context between clients without losing momentum.' No specific tool stack stated per client.",
+        "next_step_topic": "Step 2 skill + MCP recommendations for a multi-client AI consultant"
+      },
+      "expectations": [
+        "the rendered prompt preserves all four client contexts verbatim",
+        "the rendered prompt references the multi-client AI consultant topic",
+        "the framing instructs the LLM to push for specifics per client (which context-switch is most painful)",
+        "the prompt does not invent a tool stack for any of the four clients",
+        "the framing prefers concrete recommendations over many hedge-bet ones"
+      ]
+    }
+  ]
+}
