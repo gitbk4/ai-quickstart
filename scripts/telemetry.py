@@ -98,6 +98,12 @@ _URLOPEN_TIMEOUT_SECONDS = 2.0
 # "current batch closes at midnight UTC OR at 100 events, whichever first."
 _BATCH_MAX_EVENTS = 100
 
+# Total-disk cap for queued (un-POSTed) batches. When the pending directory
+# exceeds this, oldest batch (by mtime) is evicted before each enqueue.
+# Rationale: per v2-cathedral.md Eng Review Decision #11 — endpoint outage is
+# the realistic failure mode, drop-oldest preserves the freshest signal.
+_PENDING_DISK_CAP_BYTES = 10 * 1024 * 1024  # 10 MiB
+
 # Filenames under ~/.ai-quickstart/.
 _OPT_IN_FILE = ".telemetry-opt-in"
 _ANON_ID_FILE = ".id"  # under persona/, see _anon_id_path
@@ -471,19 +477,79 @@ def queue_for_aggregation(home: Path, event_record: Dict[str, Any]) -> None:
     base = _current_batch_path(home)
     target = base
     # If the current batch is full, append a numeric suffix until we find
-    # one with room. Bounded loop: if we somehow have 1000 same-day overflow
-    # batches (~100k events in one day), we stop trying and silently drop —
-    # the privacy posture is more important than the metric.
+    # one with room. Per-batch cap is for POST batch sizing; total-disk cap
+    # below handles long-term accumulation when the endpoint is unreachable.
     if _count_batch_events(target) >= _BATCH_MAX_EVENTS:
-        for suffix in range(1, 1000):
+        suffix = 1
+        while True:
             candidate = base.parent / f"{base.stem}.{suffix}.jsonl"
             if _count_batch_events(candidate) < _BATCH_MAX_EVENTS:
                 target = candidate
                 break
-        else:
-            return
+            suffix += 1
+
+    # Total-disk cap: before writing, evict oldest batches until the pending
+    # dir (plus the new payload) is under the cap. Endpoint outage is the
+    # realistic failure mode, and we'd rather lose stale batches than the
+    # freshest signal. _evict_oldest_pending returns False if it cannot
+    # free more space (e.g. only the current target exists); in that case
+    # drop the event silently — privacy posture > telemetry completeness.
+    pending_dir = _pending_dir(home)
+    if not _ensure_pending_capacity(pending_dir, len(payload), keep=target):
+        return
 
     _append_atomic(target, payload)
+
+
+def _pending_total_bytes(pending_dir: Path) -> int:
+    """Sum of byte sizes of all *.jsonl files under pending_dir. 0 if missing."""
+    if not pending_dir.is_dir():
+        return 0
+    total = 0
+    for entry in pending_dir.iterdir():
+        if entry.is_file() and entry.suffix == ".jsonl":
+            try:
+                total += entry.stat().st_size
+            except OSError:
+                continue
+    return total
+
+
+def _evict_oldest_pending(pending_dir: Path, keep: Path) -> bool:
+    """Delete the oldest *.jsonl batch under pending_dir (excluding ``keep``).
+
+    Returns True if a file was deleted, False if there's nothing to evict.
+    'Oldest' is determined by mtime; ties broken by name.
+    """
+    if not pending_dir.is_dir():
+        return False
+    candidates: List[Path] = []
+    for entry in pending_dir.iterdir():
+        if entry.is_file() and entry.suffix == ".jsonl" and entry != keep:
+            candidates.append(entry)
+    if not candidates:
+        return False
+    candidates.sort(key=lambda p: (p.stat().st_mtime, p.name))
+    try:
+        candidates[0].unlink()
+        return True
+    except OSError:
+        return False
+
+
+def _ensure_pending_capacity(pending_dir: Path, new_bytes: int, *, keep: Path) -> bool:
+    """Evict oldest batches until pending dir + new_bytes fits under the cap.
+
+    Returns True if there is now room (or no eviction was needed); False if
+    even after evicting everything else, the new payload still wouldn't fit
+    (caller should drop the event). The ``keep`` file is never evicted —
+    it's the batch we're about to append into.
+    """
+    while _pending_total_bytes(pending_dir) + new_bytes > _PENDING_DISK_CAP_BYTES:
+        if not _evict_oldest_pending(pending_dir, keep=keep):
+            # Nothing left to evict and we still don't fit. Caller drops.
+            return False
+    return True
 
 
 def _post_batch(path: Path) -> Optional[str]:

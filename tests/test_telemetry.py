@@ -272,6 +272,122 @@ class LogEventTests(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
+# Total-disk cap (drop-oldest-on-overflow)
+#
+# Per Eng Review Decision #11: when the remote endpoint is unreachable for an
+# extended period, queued batches accumulate. The pending dir is capped at
+# ~10 MB; before each enqueue, oldest batches are evicted (by mtime) until
+# the new payload fits. Drop-oldest preserves the freshest signal.
+# ---------------------------------------------------------------------------
+
+
+class PendingDiskCapTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.home = Path(self.tmp.name)
+        telemetry.set_opt_in(self.home, True)
+
+    def _pending_dir(self) -> Path:
+        return self.home / "persona" / ".pending-telemetry"
+
+    def test_under_cap_no_eviction(self):
+        # Three small batches well under the 10MB cap. No eviction, all retained.
+        for i in range(3):
+            telemetry.log_event(
+                self.home, "dashboard.launched", fields={"duration_ms": i}
+            )
+        batches = sorted(self._pending_dir().glob("batch-*.jsonl"))
+        self.assertEqual(len(batches), 1)  # all into the same daily batch
+        with open(batches[0], "r", encoding="utf-8") as f:
+            self.assertEqual(len([l for l in f if l.strip()]), 3)
+
+    def test_over_cap_evicts_oldest(self):
+        # Cap = 2500; 3 stale batches at 1024 each = 3072 already over.
+        # Adding a small new payload forces eviction of oldest until the new
+        # write fits. With ~200-byte new payload: must evict stale_a (oldest)
+        # to bring total below cap. Newer stale batches survive.
+        original_cap = telemetry._PENDING_DISK_CAP_BYTES
+        telemetry._PENDING_DISK_CAP_BYTES = 2500
+        try:
+            pdir = self._pending_dir()
+            pdir.mkdir(parents=True, exist_ok=True)
+            stale_a = pdir / "batch-2026-01-01.jsonl"
+            stale_b = pdir / "batch-2026-01-02.jsonl"
+            stale_c = pdir / "batch-2026-01-03.jsonl"
+            for path, mtime in [(stale_a, 1000), (stale_b, 2000), (stale_c, 3000)]:
+                path.write_bytes(b"x" * 1024)
+                os.utime(path, (mtime, mtime))
+            telemetry.log_event(
+                self.home, "dashboard.launched", fields={"duration_ms": 1}
+            )
+            # Oldest got evicted; others survive.
+            self.assertFalse(stale_a.exists(), "oldest batch should have been evicted")
+            self.assertTrue(stale_b.exists(), "second-oldest should survive")
+            self.assertTrue(stale_c.exists(), "newest stale should survive")
+            # Current batch is present and contains the new event.
+            current_batches = [
+                p for p in pdir.glob("batch-*.jsonl")
+                if p.name not in {"batch-2026-01-02.jsonl", "batch-2026-01-03.jsonl"}
+            ]
+            self.assertEqual(len(current_batches), 1)
+            with open(current_batches[0], "r", encoding="utf-8") as f:
+                events = [json.loads(line) for line in f if line.strip()]
+            self.assertEqual(len(events), 1)
+            self.assertEqual(events[0]["event_type"], "dashboard.launched")
+        finally:
+            telemetry._PENDING_DISK_CAP_BYTES = original_cap
+
+    def test_eviction_order_is_mtime_oldest_first(self):
+        original_cap = telemetry._PENDING_DISK_CAP_BYTES
+        telemetry._PENDING_DISK_CAP_BYTES = 3072  # 3 KiB; allow exactly 2 stale
+        try:
+            pdir = self._pending_dir()
+            pdir.mkdir(parents=True, exist_ok=True)
+            # Three stale batches with reverse-creation-order mtimes — eviction
+            # must use mtime, not name or creation order.
+            paths = []
+            for i, mtime in enumerate([3000, 1000, 2000]):  # b is oldest
+                p = pdir / f"batch-stale-{i}.jsonl"
+                p.write_bytes(b"x" * 1024)
+                os.utime(p, (mtime, mtime))
+                paths.append((p, mtime))
+            # Enqueue forces eviction of oldest (mtime=1000 → batch-stale-1).
+            telemetry.log_event(
+                self.home, "dashboard.launched", fields={"duration_ms": 1}
+            )
+            evicted = paths[1][0]  # mtime=1000
+            self.assertFalse(evicted.exists())
+            self.assertTrue(paths[0][0].exists())
+            self.assertTrue(paths[2][0].exists())
+        finally:
+            telemetry._PENDING_DISK_CAP_BYTES = original_cap
+
+    def test_drops_event_when_cannot_evict_enough(self):
+        # If the new payload itself exceeds the cap, every other batch is
+        # evicted but the new write is then dropped (return False from
+        # _ensure_pending_capacity). The current batch file is NOT created
+        # to avoid an empty placeholder. Fail-quiet, no exception.
+        original_cap = telemetry._PENDING_DISK_CAP_BYTES
+        telemetry._PENDING_DISK_CAP_BYTES = 16  # comically tiny
+        try:
+            pdir = self._pending_dir()
+            pdir.mkdir(parents=True, exist_ok=True)
+            stale = pdir / "batch-2026-01-01.jsonl"
+            stale.write_bytes(b"x" * 32)  # already over cap
+            telemetry.log_event(
+                self.home, "dashboard.launched", fields={"duration_ms": 1}
+            )
+            # The stale file got evicted. The new payload didn't fit either,
+            # so no current-day batch was actually written.
+            self.assertFalse(stale.exists())
+            current = list(pdir.glob("batch-*.jsonl"))
+            self.assertEqual(current, [], "new event should have been dropped")
+        finally:
+            telemetry._PENDING_DISK_CAP_BYTES = original_cap
+
+
+# ---------------------------------------------------------------------------
 # flush_aggregated
 # ---------------------------------------------------------------------------
 
