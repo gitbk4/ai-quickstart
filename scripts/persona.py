@@ -20,11 +20,25 @@ Stdlib only. Python 3.9+.
 from __future__ import annotations
 
 import difflib
+import hashlib
 import os
+import re
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
+
+
+# ---------- paragraph ID helpers (Wave 1A) ----------
+#
+# Paragraphs in persona.md may carry a stable identifier embedded in an HTML
+# comment of the form ``<!-- p:NNN -->`` (3+ digit counter). The marker can
+# appear anywhere inside the paragraph but conventionally sits at the very
+# beginning. IDs survive heal regenerations so downstream consumers (suggest,
+# eval, telemetry) can refer to specific paragraphs.
+
+PARAGRAPH_ID_PATTERN = re.compile(r"<!--\s*p:(\d{3,})\s*-->")
+_PARAGRAPH_ID_TEMPLATE = "<!-- p:{n:03d} -->"
 
 
 # ---------- schema defaults ----------
@@ -612,6 +626,239 @@ def restitch_locks(
         # are present byte-for-byte in the final prose.
         restored += len(missing)
     return out, restored
+# ---------- paragraph splitting / ID helpers (lane-1A, v2) ----------
+
+def _split_paragraphs_with_offsets(prose: str) -> List[Tuple[int, int, str]]:
+    """Split prose on blank-line separators.
+
+    Returns a list of (start_offset, end_offset, paragraph_text) tuples where
+    offsets are character positions within ``prose``. The text preserves
+    internal layout (no rstrip of internal lines) but trailing whitespace on
+    the paragraph as a whole is trimmed.
+    """
+    out: List[Tuple[int, int, str]] = []
+    if not prose:
+        return out
+    n = len(prose)
+    i = 0
+    while i < n:
+        # Skip leading blank lines.
+        while i < n:
+            line_end = prose.find("\n", i)
+            if line_end == -1:
+                line_end = n
+            line = prose[i:line_end]
+            if line.strip() == "":
+                i = line_end + 1 if line_end < n else n
+                continue
+            break
+        if i >= n:
+            break
+        start = i
+        # Walk forward until a blank line or EOF.
+        while i < n:
+            line_end = prose.find("\n", i)
+            if line_end == -1:
+                line_end = n
+            line = prose[i:line_end]
+            if line.strip() == "":
+                break
+            i = line_end + 1 if line_end < n else n
+        end = i
+        text = prose[start:end].rstrip()
+        if text:
+            out.append((start, end, text))
+        # Skip the trailing blank-line separator.
+        while i < n:
+            line_end = prose.find("\n", i)
+            if line_end == -1:
+                line_end = n
+            line = prose[i:line_end]
+            if line.strip() != "":
+                break
+            i = line_end + 1 if line_end < n else n
+    return out
+
+
+def _hash_paragraph_text(text: str) -> str:
+    """Stable content hash. We strip the ID marker (if any) before hashing so
+    the same prose carries the same hash regardless of which marker variant
+    is currently embedded."""
+    stripped = PARAGRAPH_ID_PATTERN.sub("", text)
+    # Collapse internal whitespace conservatively: every run of ws becomes a
+    # single space. This prevents trivial reformat (e.g. line wrapping) from
+    # invalidating the content hash.
+    norm = " ".join(stripped.split())
+    return hashlib.sha256(norm.encode("utf-8")).hexdigest()
+
+
+def extract_paragraph_ids(md_text: str) -> Dict[str, str]:
+    """Return ``{id: paragraph_text}`` for every ``<!-- p:NNN -->`` marker.
+
+    Operates on the prose body of ``md_text`` (frontmatter, if any, is
+    skipped). The returned text is the paragraph with the marker stripped.
+    """
+    body = md_text
+    if md_text.startswith("---"):
+        try:
+            _fm, body = _split_frontmatter(md_text)
+        except ValueError:
+            # Malformed frontmatter: scan the whole text for markers anyway.
+            body = md_text
+    out: Dict[str, str] = {}
+    for _start, _end, para in _split_paragraphs_with_offsets(body):
+        m = PARAGRAPH_ID_PATTERN.search(para)
+        if not m:
+            continue
+        pid = f"p:{m.group(1)}"
+        cleaned = PARAGRAPH_ID_PATTERN.sub("", para, count=1).strip()
+        out[pid] = cleaned
+    return out
+
+
+def _next_id(used: set) -> str:
+    """Smallest unused p:NNN strictly greater than current max."""
+    if not used:
+        return "p:001"
+    nums = []
+    for pid in used:
+        if pid.startswith("p:"):
+            digits = []
+            for ch in pid[2:]:
+                if ch.isdigit():
+                    digits.append(ch)
+                else:
+                    break
+            if digits:
+                nums.append(int("".join(digits)))
+    n = max(nums) + 1 if nums else 1
+    while f"p:{n:03d}" in used:
+        n += 1
+    return f"p:{n:03d}"
+
+
+def assign_paragraph_ids(
+    md_text: str, prior_ids: Optional[Dict[str, str]] = None
+) -> str:
+    """Assign ``<!-- p:NNN -->`` markers to paragraphs that don't have one.
+
+    For paragraphs whose normalised content matches an entry in
+    ``prior_ids`` (a {id: text} mapping from a prior persona.md), reuse that
+    ID so identifiers remain stable across user edits.
+
+    Frontmatter (if present) is preserved verbatim; only the prose body is
+    rewritten.
+    """
+    prior_ids = prior_ids or {}
+    fm_text, body = (None, md_text)
+    prefix = ""
+    if md_text.startswith("---"):
+        try:
+            fm_text, body = _split_frontmatter(md_text)
+            if fm_text is not None:
+                prefix = f"---\n{fm_text}---\n"
+        except ValueError:
+            # Malformed frontmatter: bail and just operate on the whole text
+            # as a prose body. Caller will surface the underlying error.
+            fm_text, body = None, md_text
+            prefix = ""
+
+    # Build hash -> id map from prior_ids for fallback recovery.
+    prior_hash_to_id: Dict[str, str] = {}
+    for pid, ptext in prior_ids.items():
+        prior_hash_to_id.setdefault(_hash_paragraph_text(ptext), pid)
+
+    paragraphs = _split_paragraphs_with_offsets(body)
+    if not paragraphs:
+        return md_text
+
+    # First pass: collect existing IDs in the markdown.
+    existing_ids: List[Optional[str]] = []
+    for _s, _e, para in paragraphs:
+        m = PARAGRAPH_ID_PATTERN.search(para)
+        existing_ids.append(f"p:{m.group(1)}" if m else None)
+
+    used: set = {pid for pid in existing_ids if pid}
+    # Also reserve all prior IDs so we don't accidentally reuse one for a
+    # new paragraph (only paragraph-content match should reuse).
+    used.update(prior_ids.keys())
+
+    # Second pass: hash-fallback for paragraphs missing an ID.
+    new_ids: List[str] = []
+    for (s, e, para), existing in zip(paragraphs, existing_ids):
+        if existing is not None:
+            new_ids.append(existing)
+            continue
+        h = _hash_paragraph_text(para)
+        recovered = prior_hash_to_id.get(h)
+        # Only recover if no other paragraph already grabbed it this run.
+        if recovered and recovered not in [nid for nid in new_ids]:
+            new_ids.append(recovered)
+            used.add(recovered)
+            continue
+        fresh = _next_id(used)
+        new_ids.append(fresh)
+        used.add(fresh)
+
+    # Rewrite body: insert markers at start of each paragraph that needs one.
+    out_chunks: List[str] = []
+    cursor = 0
+    for (start, end, para), pid, existing in zip(paragraphs, new_ids, existing_ids):
+        out_chunks.append(body[cursor:start])
+        if existing is not None:
+            # Already has a marker; keep the paragraph as-is.
+            out_chunks.append(body[start:end])
+        else:
+            marker = _PARAGRAPH_ID_TEMPLATE.format(n=int(pid[2:]))
+            # Insert marker on its own line before the paragraph for
+            # readability.
+            out_chunks.append(f"{marker}\n{body[start:end]}")
+        cursor = end
+    out_chunks.append(body[cursor:])
+    new_body = "".join(out_chunks)
+    return prefix + new_body
+
+
+def hash_fallback_reconstruct(
+    md_text: str, prior_persona_json: Dict[str, Any]
+) -> str:
+    """Reconstruct paragraph IDs by hashing prior persona.json paragraphs.
+
+    Use case: the user has hand-edited persona.md and either removed or
+    duplicated ``<!-- p:NNN -->`` markers. We rebuild the marker placement
+    by content-hash matching against ``prior_persona_json["paragraphs"]``.
+    Paragraphs that don't match a prior hash get fresh IDs assigned via
+    ``assign_paragraph_ids``.
+    """
+    prior_paragraphs = prior_persona_json.get("paragraphs") or []
+    prior_ids: Dict[str, str] = {}
+    if isinstance(prior_paragraphs, list):
+        for entry in prior_paragraphs:
+            if not isinstance(entry, dict):
+                continue
+            pid = entry.get("id")
+            text = entry.get("text")
+            if isinstance(pid, str) and isinstance(text, str):
+                prior_ids[pid] = text
+
+    # First, strip ALL existing markers — we want a clean slate so duplicates
+    # and stale IDs don't outvote the hash recovery pass.
+    fm_text, body = (None, md_text)
+    prefix = ""
+    if md_text.startswith("---"):
+        try:
+            fm_text, body = _split_frontmatter(md_text)
+            if fm_text is not None:
+                prefix = f"---\n{fm_text}---\n"
+        except ValueError:
+            fm_text, body = None, md_text
+            prefix = ""
+    cleaned_body = PARAGRAPH_ID_PATTERN.sub("", body)
+    # Collapse any blank lines that the marker removal may have left double-
+    # spaced. We tolerate one blank line between paragraphs.
+    cleaned_body = re.sub(r"\n{3,}", "\n\n", cleaned_body)
+
+    return assign_paragraph_ids(prefix + cleaned_body, prior_ids=prior_ids)
 
 
 __all__ = [
@@ -626,4 +873,8 @@ __all__ = [
     "locked_paragraph_count",
     "strip_locks_for_rewrite",
     "restitch_locks",
+    "PARAGRAPH_ID_PATTERN",
+    "extract_paragraph_ids",
+    "assign_paragraph_ids",
+    "hash_fallback_reconstruct",
 ]

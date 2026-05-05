@@ -445,3 +445,65 @@ def test_strip_locks_no_op_when_no_locks():
     stripped, segments = persona.strip_locks_for_rewrite(prose)
     assert stripped == prose
     assert segments == []
+# ---------- paragraph ID helpers (Wave 1A) ----------
+
+def test_paragraph_id_pattern_matches_canonical_form():
+    assert persona.PARAGRAPH_ID_PATTERN.search("<!-- p:001 -->") is not None
+    assert persona.PARAGRAPH_ID_PATTERN.search("<!--p:042-->") is not None
+    assert persona.PARAGRAPH_ID_PATTERN.search("<!-- p:1234 -->") is not None
+    # Two-digit counter is rejected (we require >=3 digits).
+    assert persona.PARAGRAPH_ID_PATTERN.search("<!-- p:01 -->") is None
+    # Wrong prefix is rejected.
+    assert persona.PARAGRAPH_ID_PATTERN.search("<!-- q:001 -->") is None
+
+
+def test_extract_paragraph_ids_skips_paragraphs_without_marker():
+    md = "Plain paragraph without a marker.\n\n<!-- p:005 -->\nMarked.\n"
+    ids = persona.extract_paragraph_ids(md)
+    assert set(ids.keys()) == {"p:005"}
+    assert ids["p:005"] == "Marked."
+
+
+def test_assign_paragraph_ids_preserves_existing_markers():
+    md = (
+        "<!-- p:007 -->\nAlready tagged paragraph.\n\n"
+        "Untagged paragraph.\n"
+    )
+    out = persona.assign_paragraph_ids(md)
+    assert "<!-- p:007 -->" in out
+    # The untagged paragraph gets the next free id (p:008, since p:007 is taken).
+    assert "<!-- p:008 -->" in out
+
+
+def test_assign_paragraph_ids_recovers_via_hash_fallback():
+    md = "Stable paragraph content.\n\nAnother paragraph.\n"
+    prior = {"p:042": "Stable paragraph content."}
+    out = persona.assign_paragraph_ids(md, prior_ids=prior)
+    # The matching paragraph gets p:042 back.
+    assert "<!-- p:042 -->" in out
+    # The non-matching paragraph gets a fresh id (>= p:043 since p:042 is reserved).
+    other_marker_present = any(
+        marker in out
+        for marker in ("<!-- p:001 -->", "<!-- p:043 -->", "<!-- p:044 -->")
+    )
+    assert other_marker_present
+
+
+def test_hash_fallback_reconstruct_strips_stale_duplicate_markers():
+    # User accidentally duplicated a marker on two different paragraphs.
+    md = (
+        "<!-- p:001 -->\nAlpha content.\n\n"
+        "<!-- p:001 -->\nBeta content.\n"
+    )
+    prior_json = {
+        "paragraphs": [
+            {"id": "p:001", "text": "Alpha content."},
+            {"id": "p:002", "text": "Beta content."},
+        ]
+    }
+    out = persona.hash_fallback_reconstruct(md, prior_json)
+    # Alpha keeps p:001 via hash match; Beta gets p:002 back via hash match.
+    assert "<!-- p:001 -->" in out
+    assert "<!-- p:002 -->" in out
+    # The duplicate p:001 marker is gone (only one occurrence remains).
+    assert out.count("<!-- p:001 -->") == 1
