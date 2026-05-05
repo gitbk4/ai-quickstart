@@ -58,6 +58,7 @@ _here = Path(__file__).resolve().parent
 if str(_here) not in sys.path:
     sys.path.insert(0, str(_here))
 import persona  # type: ignore  # noqa: E402
+import persona_json  # type: ignore  # noqa: E402
 
 
 # ---------- constants & paths ----------
@@ -564,6 +565,26 @@ def cmd_write(
         _apply_activity_overrides(new_frontmatter, activity_json, err=err)
 
         persona.write_persona(ppath, new_frontmatter, new_prose)
+
+        # Wave 1A: regenerate persona.json after every successful prose write.
+        # This is best-effort — if it fails we log and move on rather than
+        # rolling back the (already-successful) prose write. Downstream
+        # consumers tolerate a missing/stale persona.json by falling back
+        # to the markdown.
+        try:
+            json_path = persona_json.persona_json_path(_home_root(home))
+            payload = persona_json.generate_from_md(
+                ppath, json_path if json_path.exists() else None
+            )
+            persona_json.write_persona_json(_home_root(home), payload)
+        except Exception as exc:  # pylint: disable=broad-except
+            _log_heal_error(
+                phase="write-persona-json",
+                error=repr(exc),
+                tb_first_line=_first_traceback_line(exc),
+                home=home,
+            )
+            err.write(f"[heal] warning: persona.json regen failed: {exc}\n")
 
         # Re-read the bumped frontmatter from disk so summary reflects the actual
         # written version (write_persona bumps its internal copy, not the caller's).
