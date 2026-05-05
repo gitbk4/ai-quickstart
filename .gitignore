@@ -11,3 +11,9 @@ dist/
 *.bak
 .DS_Store
 .claude/
+
+# Planning docs symlinked to ~/.gstack/projects/gitbk4-ai-quickstart/.
+# Canonical files live there; the symlinks let in-repo agents read them
+# transparently while keeping the contents out of the public repo.
+/TODOS.md
+/docs/designs/v2-cathedral.md
