@@ -1,0 +1,256 @@
+# ai-quickstart Wave 2A: tag-based alternatives table.
+#
+# Schema:
+#   schema_version: int (required, currently 1)
+#   alternatives:
+#     <tag>:                              # e.g. research-assistant, code-review
+#       saas:                             # hosted SaaS alternatives
+#         - name: <str>
+#           url: <str>
+#           why: <str>
+#       oss: ...
+#       claude_skill: ...                 # native Claude Code / Anthropic skill
+#       mcp_server: ...                   # MCP server, plug-and-play
+#       agent_platform: ...               # higher-level agent runners
+#
+# Curation rules:
+#   - Real, currently-existing tools only. Don't fabricate URLs.
+#   - Each tag should cover at least one entry per kind where reasonable.
+#     Missing kinds are fine (some kinds don't exist for some tags).
+#   - Keep `why` short — single line, <80 chars.
+#   - Tags align with `personas.yaml` claude_skills[].name where practical so
+#     pair_with_suggestion can match the suggestion's `category`/`name` tag.
+
+schema_version: 1
+alternatives:
+  research-assistant:
+    saas:
+      - name: Perplexity
+        url: "https://perplexity.ai"
+        why: "fast web-grounded answers, no setup"
+      - name: Notion AI
+        url: "https://notion.com/ai"
+        why: "embedded in your workspace"
+    oss:
+      - name: Open WebUI
+        url: "https://github.com/open-webui/open-webui"
+        why: "self-hosted chat with web search"
+      - name: SearXNG
+        url: "https://github.com/searxng/searxng"
+        why: "privacy-focused metasearch you can host"
+    claude_skill:
+      - name: anthropics/courses
+        url: "https://github.com/anthropics/courses"
+        why: "curated learning paths and prompts"
+      - name: anthropic-cookbook
+        url: "https://github.com/anthropics/anthropic-cookbook"
+        why: "research-flow recipes you can fork"
+    mcp_server:
+      - name: exa-search
+        url: "https://github.com/exa-labs/exa-mcp-server"
+        why: "web search MCP, plug-and-play"
+      - name: fetch
+        url: "https://github.com/modelcontextprotocol/servers/tree/main/src/fetch"
+        why: "fetch and parse arbitrary URLs"
+    agent_platform:
+      - name: AgentGPT
+        url: "https://github.com/reworkd/AgentGPT"
+        why: "no-code agent runner in the browser"
+  curriculum-design:
+    saas:
+      - name: Coursebox
+        url: "https://www.coursebox.ai"
+        why: "AI-assisted course builder with hosted output"
+    oss:
+      - name: Open edX
+        url: "https://github.com/openedx/edx-platform"
+        why: "full LMS you can self-host"
+    claude_skill:
+      - name: anthropics/courses
+        url: "https://github.com/anthropics/courses"
+        why: "curriculum patterns adaptable to your domain"
+      - name: prompt-eng-interactive-tutorial
+        url: "https://github.com/anthropics/prompt-eng-interactive-tutorial"
+        why: "tutorial template for AI-native curricula"
+    mcp_server:
+      - name: filesystem
+        url: "https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem"
+        why: "read curriculum source materials locally"
+  code-review:
+    saas:
+      - name: CodeRabbit
+        url: "https://coderabbit.ai"
+        why: "PR review bot, GitHub-native"
+      - name: Greptile
+        url: "https://greptile.com"
+        why: "codebase-aware review across PRs"
+    oss:
+      - name: Aider
+        url: "https://github.com/Aider-AI/aider"
+        why: "terminal-native AI pair-programmer"
+      - name: Continue
+        url: "https://github.com/continuedev/continue"
+        why: "self-hostable IDE assistant"
+    claude_skill:
+      - name: claude-code-reference
+        url: "https://github.com/anthropics/claude-code"
+        why: "reference patterns from the Claude Code repo"
+    mcp_server:
+      - name: github
+        url: "https://github.com/modelcontextprotocol/servers/tree/main/src/github"
+        why: "PR + issues + repo access via MCP"
+      - name: git
+        url: "https://github.com/modelcontextprotocol/servers/tree/main/src/git"
+        why: "local git operations as MCP tools"
+    agent_platform:
+      - name: Sweep
+        url: "https://github.com/sweepai/sweep"
+        why: "issue-to-PR agent for small changes"
+  ops-automation:
+    saas:
+      - name: Zapier AI Actions
+        url: "https://zapier.com/ai"
+        why: "thousands of pre-built integrations"
+      - name: n8n Cloud
+        url: "https://n8n.io"
+        why: "hosted workflow automation with AI nodes"
+    oss:
+      - name: n8n
+        url: "https://github.com/n8n-io/n8n"
+        why: "self-hostable workflow engine, fair-code"
+      - name: Activepieces
+        url: "https://github.com/activepieces/activepieces"
+        why: "open-source Zapier alternative"
+    claude_skill:
+      - name: claude-code-reference
+        url: "https://github.com/anthropics/claude-code"
+        why: "patterns for internal automations and runbooks"
+    mcp_server:
+      - name: filesystem
+        url: "https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem"
+        why: "scoped local-FS automation, plug-and-play"
+      - name: slack
+        url: "https://github.com/modelcontextprotocol/servers/tree/main/src/slack"
+        why: "ops chatops integration"
+    agent_platform:
+      - name: AutoGPT
+        url: "https://github.com/Significant-Gravitas/AutoGPT"
+        why: "general-purpose autonomous agent platform"
+  data-pipeline:
+    saas:
+      - name: Hex
+        url: "https://hex.tech"
+        why: "notebooks + AI for data exploration"
+      - name: Fivetran
+        url: "https://fivetran.com"
+        why: "managed ELT for known sources"
+    oss:
+      - name: dbt-core
+        url: "https://github.com/dbt-labs/dbt-core"
+        why: "SQL-first transformations, OSS"
+      - name: Dagster
+        url: "https://github.com/dagster-io/dagster"
+        why: "asset-aware pipeline orchestration"
+      - name: Airbyte
+        url: "https://github.com/airbytehq/airbyte"
+        why: "self-hostable ELT with hundreds of connectors"
+    claude_skill:
+      - name: anthropic-cookbook
+        url: "https://github.com/anthropics/anthropic-cookbook"
+        why: "data-recipe notebooks adaptable to your schema"
+    mcp_server:
+      - name: postgres
+        url: "https://github.com/modelcontextprotocol/servers/tree/main/src/postgres"
+        why: "read-only Postgres access for analytics"
+      - name: sqlite
+        url: "https://github.com/modelcontextprotocol/servers/tree/main/src/sqlite"
+        why: "lightweight local data store"
+  design-tools:
+    saas:
+      - name: Figma AI
+        url: "https://www.figma.com/ai"
+        why: "AI features inside the Figma canvas"
+      - name: v0 by Vercel
+        url: "https://v0.dev"
+        why: "prompt-to-UI component generator"
+    oss:
+      - name: Penpot
+        url: "https://github.com/penpot/penpot"
+        why: "open-source design platform, self-hostable"
+    claude_skill:
+      - name: anthropic-cookbook
+        url: "https://github.com/anthropics/anthropic-cookbook"
+        why: "image + multimodal recipes for design flows"
+    mcp_server:
+      - name: figma-developer-mcp
+        url: "https://github.com/GLips/Figma-Context-MCP"
+        why: "read Figma designs into a coding agent"
+  sales-outreach:
+    saas:
+      - name: Clay
+        url: "https://www.clay.com"
+        why: "AI-driven prospect enrichment + outreach"
+      - name: Apollo.io
+        url: "https://www.apollo.io"
+        why: "B2B contact database with AI sequences"
+    oss:
+      - name: Mautic
+        url: "https://github.com/mautic/mautic"
+        why: "open-source marketing automation"
+    claude_skill:
+      - name: research-assistant
+        url: "https://github.com/anthropics/anthropic-cookbook"
+        why: "account-research workflow patterns"
+    mcp_server:
+      - name: gmail
+        url: "https://github.com/GongRzhe/Gmail-MCP-Server"
+        why: "send + triage outreach via Gmail MCP"
+      - name: slack
+        url: "https://github.com/modelcontextprotocol/servers/tree/main/src/slack"
+        why: "internal sales-ops coordination"
+  education:
+    saas:
+      - name: Khanmigo
+        url: "https://www.khanacademy.org/khan-labs"
+        why: "Khan Academy's AI tutor product"
+      - name: Notion AI
+        url: "https://notion.com/ai"
+        why: "study-notes assistant inside Notion"
+    oss:
+      - name: Open edX
+        url: "https://github.com/openedx/edx-platform"
+        why: "self-hosted LMS with course tooling"
+    claude_skill:
+      - name: anthropics/courses
+        url: "https://github.com/anthropics/courses"
+        why: "self-paced courses on prompting + Claude"
+      - name: prompt-eng-interactive-tutorial
+        url: "https://github.com/anthropics/prompt-eng-interactive-tutorial"
+        why: "ready-to-fork interactive lessons"
+    mcp_server:
+      - name: filesystem
+        url: "https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem"
+        why: "read course materials and student notes locally"
+  documentation:
+    saas:
+      - name: Mintlify
+        url: "https://mintlify.com"
+        why: "AI-powered hosted docs site"
+      - name: GitBook AI
+        url: "https://www.gitbook.com"
+        why: "AI search and doc generation"
+    oss:
+      - name: Docusaurus
+        url: "https://github.com/facebook/docusaurus"
+        why: "static docs site you fully control"
+      - name: MkDocs
+        url: "https://github.com/mkdocs/mkdocs"
+        why: "minimal Python-based docs generator"
+    claude_skill:
+      - name: claude-code-reference
+        url: "https://github.com/anthropics/claude-code"
+        why: "patterns for doc-generation skills"
+    mcp_server:
+      - name: filesystem
+        url: "https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem"
+        why: "read source files to draft docs"

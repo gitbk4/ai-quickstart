@@ -12,8 +12,13 @@ Pattern (compathy split):
 
 Public API:
   * ``load_mapping(mapping_path) -> dict``
-  * ``gather(answers, mapping_path, max_workers=3) -> dict``
+  * ``gather(answers, mapping_path, max_workers=3, persona=None) -> dict``
   * ``apply_user_edits(suggestions, accepted, rejected) -> dict``
+  * ``attach_alternatives(suggestions, persona, *, home=None) -> dict``
+    Wave 2A: decorates each skill / mcp_server with an ``alternatives``
+    list (1-2 items), emits one ``suggestion.surfaced`` telemetry event
+    summarising the count rendered. Non-blocking: errors land on stderr,
+    suggestions dict is returned unchanged on failure.
 
 Determinism: ``gather`` ranks every output list by
 ``(source_tier_priority, -stars, has_warnings, name)``. The same inputs and
@@ -488,6 +493,10 @@ def gather(
     answers: Dict[str, Any],
     mapping_path: Path,
     max_workers: int = 3,
+    persona: Optional[Dict[str, Any]] = None,
+    *,
+    alternatives_yaml_path: Optional[Path] = None,
+    telemetry_home: Optional[Path] = None,
 ) -> Dict[str, Any]:
     """Look up a curated block and enrich it with live freshness data.
 
@@ -586,12 +595,22 @@ def gather(
     enriched_skills.sort(key=_rank_key)
     enriched_servers.sort(key=_rank_key)
 
-    return {
+    result = {
         "project_templates": list(project_templates),
         "skills": enriched_skills,
         "mcp_servers": enriched_servers,
         "warnings": warnings,
     }
+
+    # Wave 2A: decorate suggestions with alternatives + emit telemetry. This is
+    # non-blocking: any failure logs to stderr and the suggestions dict is
+    # returned unchanged (the deterministic curated/registry data is the floor).
+    return attach_alternatives(
+        result,
+        persona,
+        alternatives_yaml_path=alternatives_yaml_path,
+        telemetry_home=telemetry_home,
+    )
 
 
 def _safe_fetch_skill(skill: Dict[str, Any]) -> Dict[str, Any]:
@@ -633,6 +652,95 @@ def _collect(
         )
         out["source_tier"] = "curated"
         return out
+
+
+# ---------------------------------------------------------------------------
+# Wave 2A: alternatives + telemetry hook
+# ---------------------------------------------------------------------------
+
+
+def attach_alternatives(
+    suggestions: Dict[str, Any],
+    persona: Optional[Dict[str, Any]],
+    *,
+    alternatives_yaml_path: Optional[Path] = None,
+    telemetry_home: Optional[Path] = None,
+) -> Dict[str, Any]:
+    """Decorate each skill / mcp_server entry with up to 2 alternatives.
+
+    Wave 2A render hook. The returned dict is the same shape as ``suggestions``
+    plus an ``alternatives`` list on each skill / mcp_server entry. Each
+    alternative carries ``{kind, name, url, why, fit_score, why_for_you}``
+    (per ``alternatives.pair_with_suggestion``).
+
+    Telemetry: emits one ``suggestion.surfaced`` event with the
+    ``count`` of alternatives rendered across all suggestions. Wrapped in
+    try/except — telemetry failure NEVER breaks suggestions.
+
+    Non-blocking: if ``mappings/alternatives.yaml`` is missing, malformed, or
+    schema-version mismatched, ``alternatives.load_alternatives`` already
+    returns ``{}`` with a stderr warning, and each entry will simply have
+    an empty ``alternatives: []`` list.
+    """
+    if not isinstance(suggestions, dict):
+        return suggestions  # defensive — should never happen via gather()
+
+    out = dict(suggestions)
+    total = 0
+
+    try:
+        # Lazy import keeps the suggest module loadable even before Wave 2A
+        # files land (e.g. on partial worktree checkouts during testing).
+        import alternatives as _alts  # type: ignore  # noqa: PLC0415
+
+        for key in ("skills", "mcp_servers"):
+            items = out.get(key)
+            if not isinstance(items, list):
+                continue
+            decorated: List[Dict[str, Any]] = []
+            for entry in items:
+                if not isinstance(entry, dict):
+                    decorated.append(entry)
+                    continue
+                try:
+                    alts_for_entry = _alts.pair_with_suggestion(
+                        entry, persona, yaml_path=alternatives_yaml_path
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    sys.stderr.write(
+                        f"ai-quickstart suggest: pair_with_suggestion failed: {exc}\n"
+                    )
+                    alts_for_entry = []
+                new_entry = dict(entry)
+                new_entry["alternatives"] = alts_for_entry
+                decorated.append(new_entry)
+                total += len(alts_for_entry)
+            out[key] = decorated
+    except Exception as exc:  # noqa: BLE001
+        sys.stderr.write(
+            f"ai-quickstart suggest: alternatives attach skipped: {exc}\n"
+        )
+        # Return the original suggestions unchanged.
+        return suggestions
+
+    # Telemetry: one event summarising the alternatives count rendered.
+    if total > 0:
+        try:
+            import telemetry as _telemetry  # type: ignore  # noqa: PLC0415
+
+            home = telemetry_home if telemetry_home is not None else (
+                Path.home() / ".ai-quickstart"
+            )
+            _telemetry.log_event(
+                home, "suggestion.surfaced", {"count": int(total)}
+            )
+        except Exception as exc:  # noqa: BLE001
+            # Telemetry failure is intentionally silent at non-debug verbosity.
+            sys.stderr.write(
+                f"ai-quickstart suggest: telemetry log_event skipped: {exc}\n"
+            )
+
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -697,6 +805,7 @@ def apply_user_edits(
 __all__ = [
     "load_mapping",
     "gather",
+    "attach_alternatives",
     "apply_user_edits",
     "SCHEMA_VERSION",
     "LOW_QUALITY_STAR_THRESHOLD",

@@ -546,3 +546,191 @@ def test_apply_user_edits_does_not_mutate_input():
     assert suggestions["project_templates"] == ["alpha", "beta"]
     # Output is a new structure.
     assert out is not suggestions
+
+
+# ---------------------------------------------------------------------------
+# Wave 2A: alternatives engine integration
+# ---------------------------------------------------------------------------
+
+
+import alternatives  # noqa: E402
+
+_ALTERNATIVES_YAML = """schema_version: 1
+alternatives:
+  research-assistant:
+    saas:
+      - name: Perplexity
+        url: "https://perplexity.ai"
+        why: "fast web-grounded answers"
+    oss:
+      - name: Open WebUI
+        url: "https://example.com/owui"
+        why: "self-hosted"
+  low-quality-skill:
+    saas:
+      - name: AltSaaS
+        url: "https://example.com/saas"
+        why: "alt"
+    oss:
+      - name: AltOSS
+        url: "https://example.com/oss"
+        why: "alt"
+"""
+
+
+def _persona_for_suggest_tests():
+    return {
+        "schema_version": 1,
+        "structured": {
+            "role": "researcher",
+            "archetype": "job",
+            "industry": "marketing",
+            "skill_tolerance": "medium",
+            "project_style": "minimal",
+            "top_projects": [],
+        },
+        "paragraphs": [
+            {
+                "id": "p:001",
+                "text": "I rely on a research-assistant flow",
+                "provenance": "anecdote",
+                "trust_score": 4,
+                "anchored_to": None,
+                "locked": False,
+                "merged_from": None,
+            }
+        ],
+        "deleted_ids": [],
+    }
+
+
+@pytest.fixture
+def alternatives_yaml(tmp_path):
+    p = tmp_path / "alternatives.yaml"
+    p.write_text(_ALTERNATIVES_YAML, encoding="utf-8")
+    alternatives._clear_cache_for_tests()
+    return p
+
+
+def test_gather_attaches_alternatives_when_persona_passed(
+    mapping_path, alternatives_yaml, tmp_path
+):
+    """Test 16: gather() decorates each suggestion with `alternatives`."""
+    answers = {"archetype": "job", "industry": "marketing"}
+    persona = _persona_for_suggest_tests()
+    home = tmp_path / "home"
+    (home / "persona").mkdir(parents=True)
+    with patch.object(suggest.github, "fetch_repo", side_effect=_gh_dispatch), \
+         patch.object(suggest.mcp_registry, "search", side_effect=_registry_brave), \
+         patch.object(suggest.mcpmarket, "search", side_effect=_market_hello):
+        result = suggest.gather(
+            answers,
+            mapping_path,
+            persona=persona,
+            alternatives_yaml_path=alternatives_yaml,
+            telemetry_home=home,
+        )
+
+    # research-assistant skill should now have an `alternatives` list.
+    research = next(s for s in result["skills"] if s["name"] == "research-assistant")
+    assert "alternatives" in research
+    assert isinstance(research["alternatives"], list)
+    assert len(research["alternatives"]) >= 1
+    for alt in research["alternatives"]:
+        assert "kind" in alt and "name" in alt and "url" in alt
+        assert "fit_score" in alt
+        assert "why_for_you" in alt
+
+
+def test_gather_skips_alternatives_when_yaml_malformed(
+    mapping_path, tmp_path
+):
+    """Test 17: malformed alternatives.yaml degrades gracefully."""
+    bad_yaml = tmp_path / "bad-alternatives.yaml"
+    bad_yaml.write_text(
+        "schema_version: 1\n  bad-indent: oops\n", encoding="utf-8"
+    )
+    alternatives._clear_cache_for_tests()
+    answers = {"archetype": "job", "industry": "marketing"}
+    persona = _persona_for_suggest_tests()
+    home = tmp_path / "home"
+    (home / "persona").mkdir(parents=True)
+    with patch.object(suggest.github, "fetch_repo", side_effect=_gh_dispatch), \
+         patch.object(suggest.mcp_registry, "search", side_effect=_registry_brave), \
+         patch.object(suggest.mcpmarket, "search", side_effect=_market_hello):
+        result = suggest.gather(
+            answers,
+            mapping_path,
+            persona=persona,
+            alternatives_yaml_path=bad_yaml,
+            telemetry_home=home,
+        )
+
+    # Skills are still present with alternatives=[] — never break the render.
+    assert len(result["skills"]) >= 1
+    for skill in result["skills"]:
+        assert skill.get("alternatives") == [] or "alternatives" in skill
+
+
+def test_gather_emits_suggestion_surfaced_telemetry(
+    mapping_path, alternatives_yaml, tmp_path
+):
+    """Test 18: gather() calls telemetry.log_event when alternatives render."""
+    answers = {"archetype": "job", "industry": "marketing"}
+    persona = _persona_for_suggest_tests()
+    home = tmp_path / "home"
+    (home / "persona").mkdir(parents=True)
+
+    # Patch telemetry.log_event to observe the call. We need to import the
+    # actual telemetry module to patch its log_event symbol.
+    import telemetry as _telemetry  # noqa: PLC0415
+
+    with patch.object(suggest.github, "fetch_repo", side_effect=_gh_dispatch), \
+         patch.object(suggest.mcp_registry, "search", side_effect=_registry_brave), \
+         patch.object(suggest.mcpmarket, "search", side_effect=_market_hello), \
+         patch.object(_telemetry, "log_event") as mock_log:
+        suggest.gather(
+            answers,
+            mapping_path,
+            persona=persona,
+            alternatives_yaml_path=alternatives_yaml,
+            telemetry_home=home,
+        )
+
+    # At least one suggestion.surfaced event should be emitted with count > 0.
+    found_surfaced = False
+    for call in mock_log.call_args_list:
+        args, kwargs = call
+        # Signature: log_event(home, event_type, fields)
+        if len(args) >= 2 and args[1] == "suggestion.surfaced":
+            fields = args[2] if len(args) >= 3 else kwargs.get("fields", {})
+            assert isinstance(fields, dict)
+            assert fields.get("count", 0) > 0
+            found_surfaced = True
+            break
+    assert found_surfaced, "expected at least one suggestion.surfaced telemetry event"
+
+
+def test_gather_without_persona_does_not_break(
+    mapping_path, alternatives_yaml, tmp_path
+):
+    """Persona omitted: alternatives still attach with placeholders, no crash."""
+    answers = {"archetype": "job", "industry": "marketing"}
+    home = tmp_path / "home"
+    (home / "persona").mkdir(parents=True)
+    with patch.object(suggest.github, "fetch_repo", side_effect=_gh_dispatch), \
+         patch.object(suggest.mcp_registry, "search", side_effect=_registry_brave), \
+         patch.object(suggest.mcpmarket, "search", side_effect=_market_hello):
+        result = suggest.gather(
+            answers,
+            mapping_path,
+            persona=None,  # no persona
+            alternatives_yaml_path=alternatives_yaml,
+            telemetry_home=home,
+        )
+
+    # Skill list intact and decorated; fit_score is None per the spec.
+    research = next(s for s in result["skills"] if s["name"] == "research-assistant")
+    if research.get("alternatives"):
+        for alt in research["alternatives"]:
+            assert alt["fit_score"] is None
