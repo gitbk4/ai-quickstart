@@ -239,8 +239,9 @@ class PairWithSuggestionTests(unittest.TestCase):
             # Spec: "alternatives without fit_score / why_for_you (or with
             # placeholder values)". We use None placeholder for fit_score.
             self.assertIsNone(alt["fit_score"])
-            # why_for_you still present but generic.
-            self.assertIsInstance(alt["why_for_you"], str)
+            # Wave 2.5: persona-None -> why_for_you field is omitted (was
+            # boilerplate filler before). Other fields are still present.
+            self.assertNotIn("why_for_you", alt)
 
     def test_no_category_tag_returns_empty(self):
         # Test 7
@@ -376,13 +377,96 @@ class RenderWhyForYouTests(unittest.TestCase):
         out = alternatives.render_why_for_you(alt, suggestion, persona)
         self.assertLessEqual(len(out), 140)
 
-    def test_persona_none_returns_generic(self):
+    def test_persona_none_returns_empty(self):
+        # Wave 2.5: when persona is None, render_why_for_you returns ""
+        # rather than the prior "General fit for..." filler. The empty
+        # string lets pair_with_suggestion omit the field cleanly.
         suggestion = {"name": "research-assistant"}
         alt = {"kind": "saas", "name": "Perplexity", "url": "https://x", "why": "fast"}
         out = alternatives.render_why_for_you(alt, suggestion, None)
-        self.assertIsInstance(out, str)
-        self.assertGreater(len(out), 0)
-        self.assertLessEqual(len(out), 140)
+        self.assertEqual(out, "")
+
+
+# ---------------------------------------------------------------------------
+# Wave 2.5: curation alignment between personas.yaml and alternatives.yaml
+# ---------------------------------------------------------------------------
+
+
+class CurationAlignmentTests(unittest.TestCase):
+    """Every personas.yaml entry name/id must resolve to a non-empty
+    alternatives lookup. Without this, lane-2A's pair_with_suggestion
+    silently returns ``[]`` for entries that have no tag in the table,
+    which is exactly the cascading-kill mitigation we don't want."""
+
+    @classmethod
+    def setUpClass(cls):
+        # Walk personas.yaml to collect every claude_skills[].name and
+        # mcp_servers[].id, then load the real alternatives.yaml once.
+        sys.path.insert(0, str(_REPO_ROOT / "scripts"))
+        import suggest  # noqa: PLC0415
+
+        personas_path = _REPO_ROOT / "mappings" / "personas.yaml"
+        cls.personas = suggest.load_mapping(personas_path)
+        cls.alts_path = _REPO_ROOT / "mappings" / "alternatives.yaml"
+        alternatives._clear_cache_for_tests()
+        cls.alts = alternatives.load_alternatives(cls.alts_path)
+
+        names: set = set()
+        ids: set = set()
+        archetypes = cls.personas.get("archetypes", {})
+        for archetype, blocks in archetypes.items():
+            if not isinstance(blocks, dict):
+                continue
+            for industry_key, block in blocks.items():
+                if not isinstance(block, dict):
+                    continue
+                for skill in block.get("claude_skills") or []:
+                    if isinstance(skill, dict):
+                        n = skill.get("name")
+                        if isinstance(n, str) and n.strip():
+                            names.add(n.strip().lower())
+                for server in block.get("mcp_servers") or []:
+                    if isinstance(server, dict):
+                        i = server.get("id")
+                        if isinstance(i, str) and i.strip():
+                            ids.add(i.strip().lower())
+        cls.persona_names = sorted(names)
+        cls.persona_ids = sorted(ids)
+
+    def test_every_persona_skill_name_has_alternatives(self):
+        missing = [n for n in self.persona_names if n not in self.alts]
+        self.assertFalse(
+            missing,
+            f"personas.yaml claude_skills names missing from alternatives.yaml: {missing}",
+        )
+
+    def test_every_persona_mcp_id_has_alternatives(self):
+        missing = [i for i in self.persona_ids if i not in self.alts]
+        self.assertFalse(
+            missing,
+            f"personas.yaml mcp_servers ids missing from alternatives.yaml: {missing}",
+        )
+
+    def test_every_persona_entry_yields_at_least_one_pair(self):
+        """End-to-end: pair_with_suggestion must return >=1 alternative for
+        every personas.yaml entry. Catches the case where a tag exists but
+        all kinds are empty lists."""
+        bad: list = []
+        for n in self.persona_names:
+            out = alternatives.pair_with_suggestion(
+                {"name": n}, None, yaml_path=self.alts_path
+            )
+            if not out:
+                bad.append(("name", n))
+        for i in self.persona_ids:
+            out = alternatives.pair_with_suggestion(
+                {"id": i}, None, yaml_path=self.alts_path
+            )
+            if not out:
+                bad.append(("id", i))
+        self.assertFalse(
+            bad, f"personas.yaml entries with no alternatives pairing: {bad}"
+        )
 
 
 # ---------------------------------------------------------------------------

@@ -19,6 +19,16 @@ Public API:
     list (1-2 items), emits one ``suggestion.surfaced`` telemetry event
     summarising the count rendered. Non-blocking: errors land on stderr,
     suggestions dict is returned unchanged on failure.
+  * ``attach_trust_scores(suggestions) -> dict``
+    Wave 2.5: decorates each skill / mcp_server with ``trust_score`` (1-5)
+    and ``provenance`` (``curated``/``live-registry``/``inferred``/...),
+    derived from ``source_tier`` + freshness fields. Drives both the
+    dashboard pane and the Step 2 terminal output (cascading-kill
+    mitigation per v2-cathedral.md "Eng Review Decisions" #9).
+  * ``format_suggestion_terminal(entry, *, badge=True) -> str``
+    Render a single suggestion entry as one terminal line, with an ANSI
+    trust badge prefixed when ``badge=True`` and a ``trust_score`` is
+    populated. Used by Step 2's terminal renderer.
 
 Determinism: ``gather`` ranks every output list by
 ``(source_tier_priority, -stars, has_warnings, name)``. The same inputs and
@@ -605,12 +615,18 @@ def gather(
     # Wave 2A: decorate suggestions with alternatives + emit telemetry. This is
     # non-blocking: any failure logs to stderr and the suggestions dict is
     # returned unchanged (the deterministic curated/registry data is the floor).
-    return attach_alternatives(
+    result = attach_alternatives(
         result,
         persona,
         alternatives_yaml_path=alternatives_yaml_path,
         telemetry_home=telemetry_home,
     )
+
+    # Wave 2.5: also decorate each suggestion with a trust_score + provenance
+    # bucket so the terminal output (cascading-kill mitigation per
+    # v2-cathedral.md "Eng Review Decisions" #9) carries the same trust
+    # signal as the dashboard pane. Non-blocking — never fails gather().
+    return attach_trust_scores(result)
 
 
 def _safe_fetch_skill(skill: Dict[str, Any]) -> Dict[str, Any]:
@@ -744,6 +760,176 @@ def attach_alternatives(
 
 
 # ---------------------------------------------------------------------------
+# Wave 2.5: trust score + provenance attach + terminal formatter
+# ---------------------------------------------------------------------------
+
+
+# Map suggest.py's source_tier strings -> trust.score_suggestion provenance
+# buckets. Curated personas.yaml entries that DID resolve via GitHub or
+# mcpmarket are still "curated" at the trust-scoring level — the live
+# enrichment is what lets us reach score 5 (curated + strong freshness).
+# Live-only registry hits map to "live-registry" (score 3).
+_SOURCE_TIER_TO_PROVENANCE = {
+    "github": "curated",
+    "mcpmarket": "curated",
+    "mcp-registry": "live-registry",
+    "curated": "curated",
+}
+
+
+def _last_commit_days_ago(iso_str: Any) -> Optional[int]:
+    """Best-effort delta in days from ``last_commit_iso`` to now (UTC).
+
+    Returns ``None`` on parse failure so trust.score_suggestion can fall
+    through to its conservative branch. Accepts both ``...Z`` and
+    ``...+00:00`` ISO 8601 forms.
+    """
+    if not isinstance(iso_str, str) or not iso_str.strip():
+        return None
+    s = iso_str.strip()
+    # datetime.fromisoformat in 3.9 doesn't accept trailing 'Z'; normalize.
+    if s.endswith("Z"):
+        s = s[:-1] + "+00:00"
+    try:
+        from datetime import datetime, timezone  # noqa: PLC0415
+        dt = datetime.fromisoformat(s)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        delta = datetime.now(tz=timezone.utc) - dt
+        days = int(delta.total_seconds() // 86400)
+        if days < 0:
+            return 0
+        return days
+    except Exception:  # noqa: BLE001 — parse failures fall through
+        return None
+
+
+def _derive_trust_inputs(entry: Dict[str, Any]) -> Dict[str, Any]:
+    """Project a suggest.py entry into the shape trust.score_suggestion expects.
+
+    Reads:
+      * ``source_tier`` (github / mcp-registry / mcpmarket / curated)
+      * ``stars`` (from github fetch)
+      * ``last_commit_iso`` (from github fetch) -> derived days_ago
+
+    Returns a dict with ``provenance``, ``github_stars``, and
+    ``last_commit_days_ago`` populated where possible.
+    """
+    out: Dict[str, Any] = {}
+    raw_tier = entry.get("source_tier")
+    tier = raw_tier.strip().lower() if isinstance(raw_tier, str) else ""
+    out["provenance"] = _SOURCE_TIER_TO_PROVENANCE.get(tier, "inferred")
+
+    stars = entry.get("stars")
+    if isinstance(stars, int) and not isinstance(stars, bool):
+        out["github_stars"] = stars
+
+    days = _last_commit_days_ago(entry.get("last_commit_iso"))
+    if days is not None:
+        out["last_commit_days_ago"] = days
+
+    return out
+
+
+def attach_trust_scores(suggestions: Dict[str, Any]) -> Dict[str, Any]:
+    """Decorate each skill / mcp_server entry with ``trust_score`` + ``provenance``.
+
+    Wave 2.5 hook (cascading-kill mitigation): the dashboard already shows
+    trust badges; this puts the same signal in the Step 2 terminal JSON so
+    it survives if the dashboard is killed by its own kill criteria.
+
+    Per v2-cathedral.md "Defined Terms" -> Trust score table, the score is
+    deterministic (no LLM call). We map suggest.py's ``source_tier`` field
+    to the provenance buckets ``trust.score_suggestion`` expects, then
+    record the resulting integer + bucket name on each entry.
+
+    Non-blocking: if ``trust`` can't be imported (e.g. lane partial
+    checkout) the suggestions dict is returned unchanged.
+    """
+    if not isinstance(suggestions, dict):
+        return suggestions
+
+    out = dict(suggestions)
+
+    try:
+        import trust as _trust  # type: ignore  # noqa: PLC0415
+    except Exception as exc:  # noqa: BLE001
+        sys.stderr.write(
+            f"ai-quickstart suggest: trust attach skipped: {exc}\n"
+        )
+        return out
+
+    for key in ("skills", "mcp_servers"):
+        items = out.get(key)
+        if not isinstance(items, list):
+            continue
+        decorated: List[Dict[str, Any]] = []
+        for entry in items:
+            if not isinstance(entry, dict):
+                decorated.append(entry)
+                continue
+            try:
+                derived = _derive_trust_inputs(entry)
+                # Allow caller-supplied overrides on the entry itself to win.
+                view = dict(derived)
+                if isinstance(entry.get("provenance"), str):
+                    view["provenance"] = entry["provenance"]
+                score = _trust.score_suggestion(view)
+                provenance = view.get("provenance", "inferred")
+            except Exception as exc:  # noqa: BLE001 — never break the render
+                sys.stderr.write(
+                    f"ai-quickstart suggest: score_suggestion failed: {exc}\n"
+                )
+                score = 1
+                provenance = "inferred"
+            new_entry = dict(entry)
+            new_entry["trust_score"] = int(score)
+            new_entry["provenance"] = provenance
+            decorated.append(new_entry)
+        out[key] = decorated
+
+    return out
+
+
+def format_suggestion_terminal(
+    entry: Dict[str, Any], *, badge: bool = True
+) -> str:
+    """Render a single suggestion as a one-line terminal string.
+
+    Format: ``<badge> <name>`` when ``badge=True`` and a trust_score is
+    present; otherwise just ``<name>``. The badge comes from
+    ``badges.render_trust_badge_terminal`` so terminal output stays
+    consistent with the dashboard's HTML badge.
+
+    Empty fields (no name AND no id) yield ``""``. Never raises.
+    """
+    if not isinstance(entry, dict):
+        return ""
+    name = entry.get("name") or entry.get("id") or ""
+    if not isinstance(name, str):
+        name = str(name)
+    if not name:
+        return ""
+
+    if not badge:
+        return name
+
+    score = entry.get("trust_score")
+    if not isinstance(score, int) or isinstance(score, bool):
+        return name
+
+    try:
+        import badges as _badges  # type: ignore  # noqa: PLC0415
+    except Exception:  # noqa: BLE001
+        return name
+    try:
+        rendered = _badges.render_trust_badge_terminal(score)
+    except Exception:  # noqa: BLE001
+        return name
+    return f"{rendered} {name}"
+
+
+# ---------------------------------------------------------------------------
 # User edits
 # ---------------------------------------------------------------------------
 
@@ -806,6 +992,8 @@ __all__ = [
     "load_mapping",
     "gather",
     "attach_alternatives",
+    "attach_trust_scores",
+    "format_suggestion_terminal",
     "apply_user_edits",
     "SCHEMA_VERSION",
     "LOW_QUALITY_STAR_THRESHOLD",

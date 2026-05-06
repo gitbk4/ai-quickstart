@@ -65,17 +65,26 @@ PERSONA_MD_FILE = "persona.md"
 PERSONA_MD_BAK = "persona.md.bak"
 PERSONA_SUBDIR = "persona"
 
-# Default provenance / trust_score values for Wave 1A. Wave 2B overrides.
-DEFAULT_PROVENANCE = "heal"
+# Default provenance / trust_score values for fresh paragraphs that have not
+# yet been calibrated by the trust pipeline. ``"uncalibrated"`` is a sentinel:
+# trust.tag_persona_paragraph treats it the same as a missing prior_provenance
+# and applies the first-run fallthrough rule ("heal", 3). Without this
+# sentinel, the lane-1A default of "heal" got mis-read by calibrate as a
+# previous heal cycle and degraded fresh paragraphs to ("activity-inferred", 2).
+DEFAULT_PROVENANCE = "uncalibrated"
 DEFAULT_TRUST_SCORE = 3
 
 # Allowed provenance values (kept in sync with the design doc Defined Terms).
+# "uncalibrated" is the sentinel used between persona_json emission and
+# trust.calibrate_paragraph_scores; it should not appear in a calibrated
+# persona.json.
 _ALLOWED_PROVENANCE = {
     "pinned",
     "anecdote",
     "heal",
     "activity-inferred",
     "multi-hop",
+    "uncalibrated",
 }
 
 

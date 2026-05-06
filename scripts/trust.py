@@ -241,13 +241,20 @@ def tag_persona_paragraph(
       * prior_provenance == "multi-hop" -> (multi-hop, 1). Saturates: once
         a paragraph hits multi-hop, further rewrites stay at 1.
       * fall-through (no prior_provenance, no anecdote match): (heal, 3) is
-        the conservative default, matching the Wave 1A persona_json default.
+        the conservative default. A paragraph that just emerged from heal
+        with no prior provenance is a "heal" paragraph -- the LLM rewrote
+        it once. ``activity-inferred`` (2) is reserved for the chain case
+        where a previous cycle explicitly tagged it that way; it is NOT a
+        first-run fallback.
 
-    ``activity_log_lines`` is currently consulted only as a fallback signal
-    if no anecdote overlap fires AND no prior_provenance is meaningful --
-    paragraphs that mention a project name from recent activity entries
-    are nudged toward ``activity-inferred`` instead of ``heal``. This is
-    a soft signal; the deterministic rules above always win.
+    Wave 2.5 fix: previously a paragraph that mentioned a project name
+    from the activity log was downgraded to ``activity-inferred`` even on
+    its first run (no prior_provenance). That conflated "heal pipeline
+    rewrote this once" with "heal pipeline inferred this from activity
+    patterns" -- two distinct signals. We now ALWAYS return heal/3 on the
+    no-prior_provenance + no-anecdote-match fall-through, so the activity-
+    log heuristic only fires for the explicit prior_provenance branches
+    above.
     """
     if locked:
         return ("pinned", _PARAGRAPH_PROVENANCE_SCORE["pinned"])
@@ -264,6 +271,12 @@ def tag_persona_paragraph(
     # Walk the heal-rewrite chain.
     if isinstance(prior_provenance, str):
         prov = prior_provenance.strip().lower()
+        # "uncalibrated" is the persona_json.DEFAULT_PROVENANCE sentinel
+        # for fresh paragraphs that have never been calibrated. Treat it
+        # the same as a missing prior_provenance so the first-run fall-
+        # through rule fires correctly.
+        if prov == "uncalibrated":
+            prov = ""
         if prov == "pinned":
             # A previously-pinned paragraph that's no longer locked drops to
             # the heal-of-pinned position (3): it had high trust, the user
@@ -276,11 +289,14 @@ def tag_persona_paragraph(
         if prov == "multi-hop":
             return ("multi-hop", _PARAGRAPH_PROVENANCE_SCORE["multi-hop"])
 
-    # No prior provenance / no anecdote overlap. If the paragraph mentions
-    # a project name from the activity log, score it as activity-inferred;
-    # otherwise default to heal (matches Wave 1A's conservative default).
-    if _matches_activity_project(paragraph_tokens, activity_log_lines):
-        return ("activity-inferred", _PARAGRAPH_PROVENANCE_SCORE["activity-inferred"])
+    # No prior provenance / no anecdote overlap: this is a fresh paragraph
+    # the heal pipeline rewrote once. Default to heal/3. We deliberately do
+    # NOT downgrade to activity-inferred even when the paragraph mentions a
+    # project name from activity -- that would conflate "rewritten by heal"
+    # with "inferred from activity log patterns." The latter is a real
+    # signal but it should be applied by an upstream tagger that knows the
+    # paragraph came from an activity-pattern source, not as a fall-through
+    # when we have no prior_provenance to anchor against.
     return ("heal", _PARAGRAPH_PROVENANCE_SCORE["heal"])
 
 

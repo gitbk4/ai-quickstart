@@ -246,12 +246,16 @@ def test_tag_persona_paragraph_chain_simulation_4_hops():
     assert saturated == ("multi-hop", 1)
 
 
-# ---------- tag_persona_paragraph: activity-inferred fallback path ----------
+# ---------- tag_persona_paragraph: first-run + disambiguation paths ----------
 
-def test_tag_persona_paragraph_activity_project_mention_inferred():
-    """Paragraph mentions a project from activity entries with no prior
-    provenance -> activity-inferred (2). This is the "we know which
-    project this came from but not how it got into the persona" case."""
+
+def test_tag_persona_paragraph_first_run_no_anecdote_returns_heal_3():
+    """Wave 2.5 fix: a paragraph with no prior_provenance and no anecdote
+    match defaults to heal/3 -- it's a fresh paragraph the heal pipeline
+    rewrote once. Even when the paragraph mentions a project name from
+    activity entries, we don't downgrade to activity-inferred on a
+    first-run paragraph: that label is reserved for paragraphs that
+    INHERITED the activity-inferred provenance through the heal chain."""
     activity = [
         {"event": "skill", "skill": "compathy", "cwd": "/Users/x/projects/risk-models"},
     ]
@@ -262,7 +266,34 @@ def test_tag_persona_paragraph_activity_project_mention_inferred():
         locked=False,
         prior_provenance=None,
     )
-    assert (tag, score) == ("activity-inferred", 2)
+    assert (tag, score) == ("heal", 3)
+
+
+def test_tag_persona_paragraph_first_run_no_activity_returns_heal_3():
+    """No prior_provenance, no anecdote, no activity match -> heal/3."""
+    tag, score = trust.tag_persona_paragraph(
+        paragraph_text="some prose that mentions nothing in particular",
+        anecdotes=[],
+        activity_log_lines=[],
+        locked=False,
+        prior_provenance=None,
+    )
+    assert (tag, score) == ("heal", 3)
+
+
+def test_tag_persona_paragraph_uncalibrated_sentinel_treated_as_first_run():
+    """The persona_json.DEFAULT_PROVENANCE='uncalibrated' sentinel must
+    fall through to the first-run rule -- otherwise calibrate degrades
+    every fresh paragraph to activity-inferred/2 because lane-1A's emit
+    pre-populates provenance with 'uncalibrated'."""
+    tag, score = trust.tag_persona_paragraph(
+        paragraph_text="fresh paragraph from lane-1A's generate_from_md",
+        anecdotes=[],
+        activity_log_lines=[],
+        locked=False,
+        prior_provenance="uncalibrated",
+    )
+    assert (tag, score) == ("heal", 3)
 
 
 # ---------- calibrate_paragraph_scores (8) ----------

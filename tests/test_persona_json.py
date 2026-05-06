@@ -148,9 +148,13 @@ def test_generate_from_md_first_time_assigns_fresh_ids(home: Path):
     assert ids == ["p:001", "p:002", "p:003"]
     texts = [p["text"] for p in payload["paragraphs"]]
     assert texts == ["First paragraph.", "Second paragraph.", "Third paragraph."]
-    # Default provenance / trust_score for Wave 1A.
+    # Default provenance for fresh paragraphs is the "uncalibrated" sentinel.
+    # trust.calibrate_paragraph_scores reads it as "no prior heal cycle" and
+    # applies the first-run rule (heal, 3). Without this sentinel, calibrate
+    # would mis-read the lane-1A default as a previous heal and degrade fresh
+    # paragraphs to activity-inferred/2 — the bug the dogfood pass surfaced.
     for p in payload["paragraphs"]:
-        assert p["provenance"] == "heal"
+        assert p["provenance"] == "uncalibrated"
         assert p["trust_score"] == 3
         assert p["locked"] is False
         assert p["merged_from"] is None

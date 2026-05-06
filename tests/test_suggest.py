@@ -734,3 +734,157 @@ def test_gather_without_persona_does_not_break(
     if research.get("alternatives"):
         for alt in research["alternatives"]:
             assert alt["fit_score"] is None
+            # Wave 2.5 (Fix 4): persona-None -> why_for_you field is omitted.
+            assert "why_for_you" not in alt
+
+
+# ---------------------------------------------------------------------------
+# Wave 2.5: trust score + provenance attach + terminal formatter
+# ---------------------------------------------------------------------------
+
+
+def test_gather_attaches_trust_score_and_provenance(
+    mapping_path, alternatives_yaml, tmp_path
+):
+    """Every skill / mcp_server in the gather() output carries trust_score
+    (1-5 int) and provenance (str bucket name)."""
+    answers = {"archetype": "job", "industry": "marketing"}
+    persona = _persona_for_suggest_tests()
+    home = tmp_path / "home"
+    (home / "persona").mkdir(parents=True)
+    with patch.object(suggest.github, "fetch_repo", side_effect=_gh_dispatch), \
+         patch.object(suggest.mcp_registry, "search", side_effect=_registry_brave), \
+         patch.object(suggest.mcpmarket, "search", side_effect=_market_hello):
+        result = suggest.gather(
+            answers,
+            mapping_path,
+            persona=persona,
+            alternatives_yaml_path=alternatives_yaml,
+            telemetry_home=home,
+        )
+
+    for entry in result["skills"] + result["mcp_servers"]:
+        assert "trust_score" in entry, f"missing trust_score on {entry.get('name') or entry.get('id')}"
+        assert isinstance(entry["trust_score"], int)
+        assert 1 <= entry["trust_score"] <= 5
+        assert "provenance" in entry
+        assert isinstance(entry["provenance"], str) and entry["provenance"]
+
+
+def test_gather_high_stars_recent_commit_yields_trust_5(mapping_path, tmp_path):
+    """A curated entry with stars > 100 + recent commit clears trust 5."""
+    answers = {"archetype": "job", "industry": "marketing"}
+    home = tmp_path / "home"
+    (home / "persona").mkdir(parents=True)
+
+    # The default _gh_high_stars stub returns stars=5000 + last_commit_iso
+    # set to 2026-04-20. Today's reference (per env current date 2026-05-02)
+    # is well within 90 days.
+    with patch.object(suggest.github, "fetch_repo", side_effect=_gh_dispatch), \
+         patch.object(suggest.mcp_registry, "search", side_effect=_registry_empty), \
+         patch.object(suggest.mcpmarket, "search", side_effect=_market_hello):
+        result = suggest.gather(answers, mapping_path, telemetry_home=home)
+
+    research = next(s for s in result["skills"] if s["name"] == "research-assistant")
+    # source_tier=github + stars=5000 + fresh commit -> curated bucket, score 5.
+    assert research["provenance"] == "curated"
+    assert research["trust_score"] == 5
+
+    low_q = next(s for s in result["skills"] if s["name"] == "low-quality-skill")
+    # low-stars (12) means weaker freshness path -> still curated, score 4.
+    assert low_q["provenance"] == "curated"
+    assert low_q["trust_score"] == 4
+
+
+def test_gather_missing_source_tier_yields_conservative_provenance(
+    mapping_path, tmp_path
+):
+    """When all live sources fail, items remain at source_tier=curated with
+    no freshness signal -> trust score 4 (curated weak), per the Wave 2B
+    table."""
+    def gh_explodes(owner, repo, force_refresh=False):
+        raise RuntimeError("no network")
+
+    answers = {"archetype": "job", "industry": "marketing"}
+    home = tmp_path / "home"
+    (home / "persona").mkdir(parents=True)
+    with patch.object(suggest.github, "fetch_repo", side_effect=gh_explodes), \
+         patch.object(suggest.mcp_registry, "search", side_effect=_registry_empty), \
+         patch.object(suggest.mcpmarket, "search", side_effect=_market_hello):
+        result = suggest.gather(answers, mapping_path, telemetry_home=home)
+
+    for entry in result["skills"]:
+        # github fetch died -> source_tier='curated', no stars/commit -> 4.
+        assert entry["provenance"] == "curated"
+        assert entry["trust_score"] == 4
+
+
+def test_gather_live_registry_yields_trust_3(mapping_path, tmp_path):
+    """source_tier=mcp-registry (no curated github backing) -> live-registry/3."""
+    answers = {"archetype": "job", "industry": "marketing"}
+    home = tmp_path / "home"
+    (home / "persona").mkdir(parents=True)
+    with patch.object(suggest.github, "fetch_repo", side_effect=_gh_dispatch), \
+         patch.object(suggest.mcp_registry, "search", side_effect=_registry_brave), \
+         patch.object(suggest.mcpmarket, "search", side_effect=_market_hello):
+        result = suggest.gather(answers, mapping_path, telemetry_home=home)
+
+    brave = next(s for s in result["mcp_servers"] if s["id"] == "brave-search")
+    assert brave["source_tier"] == "mcp-registry"
+    assert brave["provenance"] == "live-registry"
+    assert brave["trust_score"] == 3
+
+
+def test_attach_trust_scores_calls_score_suggestion():
+    """Verify attach_trust_scores delegates to trust.score_suggestion."""
+    import trust as _trust  # noqa: PLC0415
+
+    suggestions = {
+        "skills": [
+            {"name": "demo", "source_tier": "github", "stars": 500, "last_commit_iso": "2026-04-20T00:00:00Z"},
+        ],
+        "mcp_servers": [
+            {"id": "demo-server", "source_tier": "mcp-registry"},
+        ],
+        "warnings": [],
+    }
+    with patch.object(_trust, "score_suggestion", return_value=4) as mock_score:
+        out = suggest.attach_trust_scores(suggestions)
+
+    # Both entries got their score set via the mocked function.
+    assert mock_score.call_count == 2
+    assert out["skills"][0]["trust_score"] == 4
+    assert out["mcp_servers"][0]["trust_score"] == 4
+
+
+def test_format_suggestion_terminal_includes_badge():
+    """format_suggestion_terminal renders <badge> <name> when score present."""
+    entry = {"name": "research-assistant", "trust_score": 5}
+    line = suggest.format_suggestion_terminal(entry, badge=True)
+    assert "research-assistant" in line
+    # Badge text should include a glyph + level name. NO_COLOR may suppress
+    # ANSI escapes but the human-readable parts ("verified", glyph) survive.
+    assert "verified" in line or "\x1b[" in line
+
+
+def test_format_suggestion_terminal_without_badge():
+    entry = {"name": "research-assistant", "trust_score": 5}
+    line = suggest.format_suggestion_terminal(entry, badge=False)
+    assert line == "research-assistant"
+
+
+def test_format_suggestion_terminal_no_score_returns_name_only():
+    entry = {"name": "demo"}
+    assert suggest.format_suggestion_terminal(entry) == "demo"
+
+
+def test_format_suggestion_terminal_uses_id_when_no_name():
+    entry = {"id": "brave-search", "trust_score": 3}
+    line = suggest.format_suggestion_terminal(entry, badge=False)
+    assert line == "brave-search"
+
+
+def test_format_suggestion_terminal_handles_garbage_input():
+    assert suggest.format_suggestion_terminal({}) == ""
+    assert suggest.format_suggestion_terminal(None) == ""  # type: ignore[arg-type]
+    assert suggest.format_suggestion_terminal({"name": ""}) == ""

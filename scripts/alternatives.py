@@ -348,12 +348,12 @@ def render_why_for_you(
         if isinstance(why, str) and why.strip():
             alt_why = why.strip()
 
-    # Persona-less: generic reason, optionally seasoned with the alt's `why`.
+    # Persona-less: skip the boilerplate entirely. Wave 2.5 fix: the prior
+    # "General fit for the suggested category: <why>" string read as filler
+    # in dogfood and added no information beyond the alt's own `why`. We now
+    # return an empty string and pair_with_suggestion drops the field.
     if not isinstance(persona, dict):
-        msg = "General fit for the suggested category"
-        if alt_why:
-            msg = f"{msg}: {alt_why}"
-        return _truncate(msg, _WHY_FOR_YOU_MAX_CHARS)
+        return ""
 
     paragraphs = persona.get("paragraphs")
     structured = persona.get("structured") if isinstance(persona, dict) else None
@@ -507,10 +507,17 @@ def pair_with_suggestion(
             }
             if persona is not None:
                 alt["fit_score"] = compute_fit_score(scoring_view, persona)
-                alt["why_for_you"] = render_why_for_you(alt, suggestion, persona)
+                why_for_you = render_why_for_you(alt, suggestion, persona)
+                if why_for_you:
+                    alt["why_for_you"] = why_for_you
             else:
                 alt["fit_score"] = None
-                alt["why_for_you"] = render_why_for_you(alt, suggestion, None)
+                # Wave 2.5: persona-less = no per-user reason; omit the field
+                # rather than render filler. render_why_for_you returns "" in
+                # the persona-None branch.
+                why_for_you = render_why_for_you(alt, suggestion, None)
+                if why_for_you:
+                    alt["why_for_you"] = why_for_you
             out.append(alt)
         return out
     except Exception as exc:  # noqa: BLE001 — never break the render path

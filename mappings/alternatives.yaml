@@ -254,3 +254,334 @@ alternatives:
       - name: filesystem
         url: "https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem"
         why: "read source files to draft docs"
+  # ------------------------------------------------------------------
+  # Wave 2.5: tags aligned with personas.yaml name/id entries so every
+  # curated suggestion has at least one alternatives lookup. Tags use
+  # the verbatim personas.yaml `name` (claude_skills) or `id` (mcp_servers)
+  # per alternatives._suggestion_tag precedence.
+  # ------------------------------------------------------------------
+  anthropic-cookbook:
+    saas:
+      - name: Perplexity
+        url: "https://perplexity.ai"
+        why: "ask-and-answer alternative to recipe-driven flows"
+    oss:
+      - name: LangChain
+        url: "https://github.com/langchain-ai/langchain"
+        why: "broader cookbook of LLM integration patterns"
+    claude_skill:
+      - name: anthropic-cookbook
+        url: "https://github.com/anthropics/anthropic-cookbook"
+        why: "official Anthropic recipes you can fork"
+      - name: prompt-eng-interactive-tutorial
+        url: "https://github.com/anthropics/prompt-eng-interactive-tutorial"
+        why: "tutorial-style companion to the cookbook"
+    mcp_server:
+      - name: fetch
+        url: "https://github.com/modelcontextprotocol/servers/tree/main/src/fetch"
+        why: "fetch arbitrary docs to feed cookbook recipes"
+  anthropic-courses:
+    saas:
+      - name: DeepLearning.AI
+        url: "https://www.deeplearning.ai"
+        why: "structured AI courses with video + exercises"
+    oss:
+      - name: Open edX
+        url: "https://github.com/openedx/edx-platform"
+        why: "self-host your own course platform"
+    claude_skill:
+      - name: anthropics/courses
+        url: "https://github.com/anthropics/courses"
+        why: "official Anthropic courses repo"
+      - name: prompt-eng-interactive-tutorial
+        url: "https://github.com/anthropics/prompt-eng-interactive-tutorial"
+        why: "interactive prompt-engineering lessons"
+    mcp_server:
+      - name: filesystem
+        url: "https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem"
+        why: "read course materials and student notes locally"
+  claude-code-reference:
+    saas:
+      - name: Cursor
+        url: "https://www.cursor.com"
+        why: "IDE-native AI coding assistant"
+    oss:
+      - name: Aider
+        url: "https://github.com/Aider-AI/aider"
+        why: "terminal-native AI pair-programmer"
+      - name: Continue
+        url: "https://github.com/continuedev/continue"
+        why: "self-hostable IDE assistant"
+    claude_skill:
+      - name: claude-code
+        url: "https://github.com/anthropics/claude-code"
+        why: "the canonical Claude Code reference repo"
+    mcp_server:
+      - name: github
+        url: "https://github.com/modelcontextprotocol/servers/tree/main/src/github"
+        why: "PR + issues + repo access via MCP"
+    agent_platform:
+      - name: Sweep
+        url: "https://github.com/sweepai/sweep"
+        why: "issue-to-PR agent for small changes"
+  cookbook-data:
+    saas:
+      - name: Hex
+        url: "https://hex.tech"
+        why: "AI-assisted notebooks for data work"
+    oss:
+      - name: Jupyter
+        url: "https://github.com/jupyter/notebook"
+        why: "the OG notebook environment, fully local"
+    claude_skill:
+      - name: anthropic-cookbook
+        url: "https://github.com/anthropics/anthropic-cookbook"
+        why: "data-flavored notebooks adaptable to your schema"
+    mcp_server:
+      - name: postgres
+        url: "https://github.com/modelcontextprotocol/servers/tree/main/src/postgres"
+        why: "read-only Postgres access for analytics"
+      - name: sqlite
+        url: "https://github.com/modelcontextprotocol/servers/tree/main/src/sqlite"
+        why: "lightweight local data store"
+  courses-curriculum:
+    saas:
+      - name: Coursebox
+        url: "https://www.coursebox.ai"
+        why: "AI-assisted course builder with hosted output"
+    oss:
+      - name: Open edX
+        url: "https://github.com/openedx/edx-platform"
+        why: "full LMS you can self-host"
+    claude_skill:
+      - name: anthropics/courses
+        url: "https://github.com/anthropics/courses"
+        why: "curriculum patterns adaptable to your domain"
+      - name: prompt-eng-interactive-tutorial
+        url: "https://github.com/anthropics/prompt-eng-interactive-tutorial"
+        why: "ready-to-fork interactive lessons"
+    mcp_server:
+      - name: filesystem
+        url: "https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem"
+        why: "read curriculum source materials locally"
+  mcp-python-sdk:
+    saas:
+      - name: Replit
+        url: "https://replit.com"
+        why: "browser IDE with Python + AI for quick prototypes"
+    oss:
+      - name: FastMCP
+        url: "https://github.com/jlowin/fastmcp"
+        why: "ergonomic Python framework for MCP servers"
+      - name: mcp-python-sdk
+        url: "https://github.com/modelcontextprotocol/python-sdk"
+        why: "the official Python SDK"
+    claude_skill:
+      - name: mcp-server-examples
+        url: "https://github.com/modelcontextprotocol/servers"
+        why: "reference MCP servers across languages"
+    mcp_server:
+      - name: fetch
+        url: "https://github.com/modelcontextprotocol/servers/tree/main/src/fetch"
+        why: "smallest reference MCP — good first build"
+  mcp-server-examples:
+    oss:
+      - name: modelcontextprotocol/servers
+        url: "https://github.com/modelcontextprotocol/servers"
+        why: "reference MCP servers in many languages"
+      - name: FastMCP
+        url: "https://github.com/jlowin/fastmcp"
+        why: "ergonomic Python framework for MCP servers"
+    claude_skill:
+      - name: mcp-python-sdk
+        url: "https://github.com/modelcontextprotocol/python-sdk"
+        why: "official Python SDK for building MCP servers"
+    mcp_server:
+      - name: filesystem
+        url: "https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem"
+        why: "canonical filesystem MCP example"
+  prompt-eng-tutorial:
+    saas:
+      - name: PromptHub
+        url: "https://www.prompthub.us"
+        why: "managed prompt versioning + A/B testing"
+    oss:
+      - name: prompt-eng-interactive-tutorial
+        url: "https://github.com/anthropics/prompt-eng-interactive-tutorial"
+        why: "Anthropic's interactive prompt-engineering tutorial"
+      - name: dspy
+        url: "https://github.com/stanfordnlp/dspy"
+        why: "programmatic prompt optimization framework"
+    claude_skill:
+      - name: anthropic-cookbook
+        url: "https://github.com/anthropics/anthropic-cookbook"
+        why: "prompt-engineering recipes alongside the tutorial"
+    mcp_server:
+      - name: filesystem
+        url: "https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem"
+        why: "read prompt files and example outputs locally"
+  brave-search:
+    saas:
+      - name: Brave Search API
+        url: "https://brave.com/search/api/"
+        why: "the hosted API behind the MCP server"
+      - name: Perplexity
+        url: "https://perplexity.ai"
+        why: "answer-shaped web search with citations"
+    oss:
+      - name: SearXNG
+        url: "https://github.com/searxng/searxng"
+        why: "privacy-focused metasearch you can host"
+    mcp_server:
+      - name: brave-search
+        url: "https://github.com/modelcontextprotocol/servers/tree/main/src/brave-search"
+        why: "Brave Search API as an MCP server"
+      - name: exa-search
+        url: "https://github.com/exa-labs/exa-mcp-server"
+        why: "Exa-backed alternative web search MCP"
+  fetch:
+    saas:
+      - name: Firecrawl
+        url: "https://www.firecrawl.dev"
+        why: "managed crawl + scrape API for LLMs"
+    oss:
+      - name: Trafilatura
+        url: "https://github.com/adbar/trafilatura"
+        why: "Python library for clean web extraction"
+    mcp_server:
+      - name: fetch
+        url: "https://github.com/modelcontextprotocol/servers/tree/main/src/fetch"
+        why: "the official fetch + parse MCP server"
+      - name: puppeteer
+        url: "https://github.com/modelcontextprotocol/servers/tree/main/src/puppeteer"
+        why: "JS-rendered fetches via headless Chrome"
+  filesystem:
+    saas:
+      - name: Dropbox
+        url: "https://www.dropbox.com"
+        why: "hosted filesystem with API access"
+    oss:
+      - name: Syncthing
+        url: "https://github.com/syncthing/syncthing"
+        why: "self-hosted file sync across devices"
+    mcp_server:
+      - name: filesystem
+        url: "https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem"
+        why: "scoped local-FS access, plug-and-play"
+      - name: git
+        url: "https://github.com/modelcontextprotocol/servers/tree/main/src/git"
+        why: "filesystem operations gated through git"
+  gdrive:
+    saas:
+      - name: Google Drive
+        url: "https://drive.google.com"
+        why: "the hosted product the MCP server wraps"
+      - name: Dropbox
+        url: "https://www.dropbox.com"
+        why: "alternate hosted file store with API"
+    oss:
+      - name: Nextcloud
+        url: "https://github.com/nextcloud/server"
+        why: "self-hostable Drive-style storage"
+    mcp_server:
+      - name: gdrive
+        url: "https://github.com/modelcontextprotocol/servers/tree/main/src/gdrive"
+        why: "Google Drive as an MCP server"
+      - name: filesystem
+        url: "https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem"
+        why: "local-only fallback when cloud isn't available"
+  github:
+    saas:
+      - name: GitHub
+        url: "https://github.com"
+        why: "the hosted platform the MCP server wraps"
+      - name: GitLab
+        url: "https://gitlab.com"
+        why: "alternate hosted git platform"
+    oss:
+      - name: Gitea
+        url: "https://github.com/go-gitea/gitea"
+        why: "self-hostable GitHub-style platform"
+      - name: Forgejo
+        url: "https://codeberg.org/forgejo/forgejo"
+        why: "community fork of Gitea"
+    mcp_server:
+      - name: github
+        url: "https://github.com/modelcontextprotocol/servers/tree/main/src/github"
+        why: "PR + issues + repo access via MCP"
+      - name: git
+        url: "https://github.com/modelcontextprotocol/servers/tree/main/src/git"
+        why: "local git operations as MCP tools"
+  gmail:
+    saas:
+      - name: Gmail
+        url: "https://mail.google.com"
+        why: "the hosted product the MCP server wraps"
+      - name: Fastmail
+        url: "https://www.fastmail.com"
+        why: "privacy-focused alternate email host"
+    oss:
+      - name: Mailcow
+        url: "https://github.com/mailcow/mailcow-dockerized"
+        why: "self-hostable mail server stack"
+    mcp_server:
+      - name: gmail
+        url: "https://github.com/GongRzhe/Gmail-MCP-Server"
+        why: "Gmail send + triage as an MCP server"
+  postgres:
+    saas:
+      - name: Neon
+        url: "https://neon.tech"
+        why: "serverless hosted Postgres with branching"
+      - name: Supabase
+        url: "https://supabase.com"
+        why: "Postgres + auth + realtime as a hosted bundle"
+    oss:
+      - name: PostgreSQL
+        url: "https://github.com/postgres/postgres"
+        why: "the canonical Postgres source"
+    mcp_server:
+      - name: postgres
+        url: "https://github.com/modelcontextprotocol/servers/tree/main/src/postgres"
+        why: "read-only Postgres access for analytics"
+      - name: sqlite
+        url: "https://github.com/modelcontextprotocol/servers/tree/main/src/sqlite"
+        why: "lightweight local fallback for prototyping"
+  slack:
+    saas:
+      - name: Slack
+        url: "https://slack.com"
+        why: "the hosted product the MCP server wraps"
+      - name: Discord
+        url: "https://discord.com"
+        why: "alternate team chat platform with API"
+    oss:
+      - name: Mattermost
+        url: "https://github.com/mattermost/mattermost"
+        why: "self-hostable Slack-style team chat"
+      - name: Zulip
+        url: "https://github.com/zulip/zulip"
+        why: "open-source threaded team chat"
+    mcp_server:
+      - name: slack
+        url: "https://github.com/modelcontextprotocol/servers/tree/main/src/slack"
+        why: "Slack messaging via MCP"
+  sqlite:
+    saas:
+      - name: Turso
+        url: "https://turso.tech"
+        why: "hosted SQLite with edge replication"
+    oss:
+      - name: SQLite
+        url: "https://github.com/sqlite/sqlite"
+        why: "the canonical SQLite source"
+      - name: DuckDB
+        url: "https://github.com/duckdb/duckdb"
+        why: "embedded analytics-focused alternative"
+    mcp_server:
+      - name: sqlite
+        url: "https://github.com/modelcontextprotocol/servers/tree/main/src/sqlite"
+        why: "lightweight local SQLite MCP server"
+      - name: postgres
+        url: "https://github.com/modelcontextprotocol/servers/tree/main/src/postgres"
+        why: "step up to Postgres when you outgrow SQLite"
