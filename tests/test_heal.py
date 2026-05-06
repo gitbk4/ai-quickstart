@@ -729,3 +729,107 @@ def test_write_diff_surfaces_preserved_locked_count(home: Path):
     err_text = err.getvalue()
     # Diff annotation lives alongside the unified diff.
     assert "preserved 1 locked paragraph" in err_text
+
+
+# ---------- Wave 2B: trust calibration end-to-end ----------
+
+def test_write_calibrates_paragraph_provenance_end_to_end(home: Path, monkeypatch):
+    """After cmd_write, persona.json paragraphs should have real provenance
+    + trust_score from trust.calibrate_paragraph_scores rather than the
+    Wave-1A defaults of ('heal', 3)."""
+    import persona_json  # noqa: WPS433
+    # Seed an anecdote whose tokens overlap a paragraph we'll write.
+    persona.append_anecdote(
+        _anecdotes_dir(home),
+        "alpha",
+        "I scaffolded compathy on the alpha project last Tuesday.\n",
+    )
+    _seed_persona(home, prose="placeholder.\n")
+
+    # New prose contains a near-verbatim quote of the anecdote.
+    new_prose = "I scaffolded compathy on the alpha project last Tuesday.\n"
+    rc = heal.cmd_write(
+        stdin=io.StringIO(new_prose),
+        stdout=io.StringIO(),
+        stderr=io.StringIO(),
+    )
+    assert rc == 0
+
+    payload = json.loads(
+        persona_json.persona_json_path(home).read_text(encoding="utf-8")
+    )
+    paragraphs = payload["paragraphs"]
+    assert paragraphs, "expected at least one paragraph in calibrated persona.json"
+    # The single new paragraph quotes the anecdote -> tag=anecdote, score=4.
+    assert paragraphs[0]["provenance"] == "anecdote"
+    assert paragraphs[0]["trust_score"] == 4
+
+
+def test_write_emits_persona_heal_committed_telemetry(home: Path, monkeypatch):
+    """The heal write path emits a `persona.heal.committed` event after
+    successful calibration. We patch telemetry.log_event and assert the
+    fields shape matches the Wave 1C contract."""
+    captured: List[Dict[str, Any]] = []
+
+    def fake_log(home_arg, event_type, fields=None):
+        captured.append(
+            {"home": str(home_arg), "event_type": event_type, "fields": fields}
+        )
+
+    # heal imports telemetry as a module attribute. Patch on heal.telemetry.
+    monkeypatch.setattr(heal.telemetry, "log_event", fake_log)
+
+    _seed_persona(home, prose="initial paragraph.\n")
+    rc = heal.cmd_write(
+        stdin=io.StringIO("a fresh paragraph after heal.\n"),
+        stdout=io.StringIO(),
+        stderr=io.StringIO(),
+    )
+    assert rc == 0
+
+    # Exactly one persona.heal.committed event was emitted.
+    committed_events = [
+        e for e in captured if e["event_type"] == "persona.heal.committed"
+    ]
+    assert len(committed_events) == 1
+    fields = committed_events[0]["fields"]
+    assert "paragraph_count" in fields
+    assert isinstance(fields["paragraph_count"], int)
+    assert fields["paragraph_count"] >= 1
+    assert "locked_count" in fields
+    assert "provenance_breakdown" in fields
+    breakdown = fields["provenance_breakdown"]
+    assert set(breakdown.keys()) == {
+        "pinned",
+        "anecdote",
+        "heal",
+        "activity-inferred",
+        "multi-hop",
+    }
+    # Total in breakdown matches paragraph_count.
+    assert sum(breakdown.values()) == fields["paragraph_count"]
+
+
+def test_write_proceeds_when_calibration_raises(home: Path, monkeypatch):
+    """If trust.calibrate_paragraph_scores raises, heal logs to
+    heal-errors.jsonl but the prose write still succeeds."""
+
+    def boom(*args, **kwargs):
+        raise RuntimeError("calibration broke")
+
+    monkeypatch.setattr(heal.trust, "calibrate_paragraph_scores", boom)
+
+    _seed_persona(home, prose="precious prose\n")
+    rc = heal.cmd_write(
+        stdin=io.StringIO("new prose\n"),
+        stdout=io.StringIO(),
+        stderr=io.StringIO(),
+    )
+    assert rc == 0
+    # persona.md was updated.
+    assert "new prose" in _persona_path(home).read_text(encoding="utf-8")
+    # Error was logged.
+    log = _heal_errors_path(home)
+    assert log.exists()
+    last_lines = log.read_text(encoding="utf-8").strip().splitlines()
+    assert any("calibrate-paragraph-scores" in line for line in last_lines)

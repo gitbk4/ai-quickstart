@@ -59,6 +59,15 @@ if str(_here) not in sys.path:
     sys.path.insert(0, str(_here))
 import persona  # type: ignore  # noqa: E402
 import persona_json  # type: ignore  # noqa: E402
+import trust  # type: ignore  # noqa: E402
+
+# Wave 1C telemetry. Wire-in is best-effort: a missing/broken telemetry
+# module must NEVER break heal. We import lazily-by-name so test
+# environments without telemetry still work.
+try:
+    import telemetry  # type: ignore  # noqa: E402
+except Exception:  # pragma: no cover - defensive
+    telemetry = None  # type: ignore
 
 
 # ---------- constants & paths ----------
@@ -676,16 +685,41 @@ def cmd_write(
         persona.write_persona(ppath, new_frontmatter, new_prose)
 
         # Wave 1A: regenerate persona.json after every successful prose write.
-        # This is best-effort — if it fails we log and move on rather than
-        # rolling back the (already-successful) prose write. Downstream
-        # consumers tolerate a missing/stale persona.json by falling back
-        # to the markdown.
+        # Wave 2B: BEFORE writing, call trust.calibrate_paragraph_scores so the
+        # paragraphs ship with real provenance + trust_score values rather than
+        # the Wave-1A defaults of ("heal", 3). Both steps are best-effort -- if
+        # either fails we log to heal-errors.jsonl and proceed (the prose write
+        # has already succeeded; we never roll that back).
         try:
             json_path = persona_json.persona_json_path(_home_root(home))
             payload = persona_json.generate_from_md(
                 ppath, json_path if json_path.exists() else None
             )
+            # Wave 2B: calibrate paragraph provenance + trust_score in-place.
+            # Wrapped separately so a calibration failure leaves us with the
+            # Wave-1A defaults rather than skipping the JSON write entirely.
+            try:
+                trust.calibrate_paragraph_scores(
+                    payload,
+                    _anecdotes_dir(home),
+                    _activity_path(home),
+                )
+            except Exception as cal_exc:  # pylint: disable=broad-except
+                _log_heal_error(
+                    phase="calibrate-paragraph-scores",
+                    error=repr(cal_exc),
+                    tb_first_line=_first_traceback_line(cal_exc),
+                    home=home,
+                )
+                err.write(
+                    f"[heal] warning: trust calibration failed; using "
+                    f"Wave-1A defaults: {cal_exc}\n"
+                )
             persona_json.write_persona_json(_home_root(home), payload)
+
+            # Wave 1C: emit persona.heal.committed telemetry. Best-effort --
+            # log_event is documented as never raising, but we wrap defensively.
+            _emit_heal_committed_event(home, payload)
         except Exception as exc:  # pylint: disable=broad-except
             _log_heal_error(
                 phase="write-persona-json",
@@ -756,6 +790,60 @@ def cmd_write(
         )
         err.write(f"heal write failed: {exc}\n")
         return 1
+
+
+def _emit_heal_committed_event(
+    home: Optional[Path], payload: Dict[str, Any]
+) -> None:
+    """Wave 2B: emit ``persona.heal.committed`` telemetry from the calibrated payload.
+
+    Fields surfaced (per v2-cathedral.md "Initial event taxonomy" + the
+    Wave 1C allowed-types contract):
+
+      * paragraph_count     -- int, number of paragraphs in the rebuilt JSON
+      * locked_count        -- int, count of paragraphs with ``locked: true``
+      * provenance_breakdown -- dict[str, int], counts per provenance tag
+
+    No prose, no IDs, no project paths. The breakdown buckets only the 5
+    known tags from the design doc -- unknown tags are silently dropped
+    so a future schema bump can't leak novel strings.
+
+    Best-effort: any failure here is swallowed; a heal that succeeded on
+    disk must never appear to fail because telemetry choked.
+    """
+    if telemetry is None:
+        return
+    try:
+        paragraphs = payload.get("paragraphs") if isinstance(payload, dict) else None
+        if not isinstance(paragraphs, list):
+            return
+        breakdown: Dict[str, int] = {
+            "pinned": 0,
+            "anecdote": 0,
+            "heal": 0,
+            "activity-inferred": 0,
+            "multi-hop": 0,
+        }
+        locked_count = 0
+        for entry in paragraphs:
+            if not isinstance(entry, dict):
+                continue
+            prov = entry.get("provenance")
+            if isinstance(prov, str) and prov in breakdown:
+                breakdown[prov] += 1
+            if entry.get("locked") is True:
+                locked_count += 1
+        fields = {
+            "paragraph_count": len(paragraphs),
+            "locked_count": locked_count,
+            "provenance_breakdown": breakdown,
+        }
+        telemetry.log_event(
+            _home_root(home), "persona.heal.committed", fields=fields
+        )
+    except Exception:  # pylint: disable=broad-except
+        # Telemetry is fire-and-forget; never raise from a heal write.
+        return
 
 
 def _deep_copy_fm(fm: Dict[str, Any]) -> Dict[str, Any]:

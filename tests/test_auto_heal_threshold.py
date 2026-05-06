@@ -147,7 +147,6 @@ class AutoHealThresholdTestCase(unittest.TestCase):
 
         # Seed plenty of activity entries -- enough to trigger once.
         self._seed_activity_lines(hook_runner.AUTO_HEAL_THRESHOLD + 3)
-        size_before_heal = self.activity_path.stat().st_size
 
         # Drive heal.cmd_write directly with a stub stdin so we don't need
         # the LLM pipeline.
@@ -159,10 +158,17 @@ class AutoHealThresholdTestCase(unittest.TestCase):
         )
         self.assertEqual(rc, 0)
 
-        # State file should now exist with offset == file size at heal time.
+        # State file should now exist with offset == activity.jsonl size at
+        # the moment _record_last_heal_offset was called inside cmd_write.
+        # Wave 2B added a `persona.heal.committed` telemetry event that heal
+        # writes BEFORE recording the offset, so the offset legitimately
+        # includes that event. Capturing size AFTER cmd_write returns is
+        # the right comparison — it's the file state at the moment heal
+        # finished, which the offset captures by design.
         self.assertTrue(self.last_heal_path.exists())
         state = json.loads(self.last_heal_path.read_text(encoding="utf-8"))
-        self.assertEqual(state["offset"], size_before_heal)
+        size_after_heal = self.activity_path.stat().st_size
+        self.assertEqual(state["offset"], size_after_heal)
 
         # The hook's "entries since last heal" count should be 0 right
         # after heal succeeded -- next hook fire stays below threshold.
