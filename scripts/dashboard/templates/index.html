@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>ai-quickstart dashboard (skeleton)</title>
+<style>
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+       margin: 2em auto; max-width: 720px; line-height: 1.45; color: #222; }
+h1 { margin-bottom: 0.2em; }
+.subtitle { color: #666; margin-top: 0; }
+ul.panes { list-style: square; padding-left: 1.2em; }
+ul.panes li { margin: 0.3em 0; }
+.persona-box { border: 1px solid #ccc; padding: 0.8em 1em; margin-top: 1.2em;
+               background: #f7f7f7; border-radius: 4px; }
+.persona-box pre { white-space: pre-wrap; word-break: break-word;
+                   margin: 0; font-size: 0.85em; }
+.error { color: #b00; }
+footer { color: #888; margin-top: 2em; font-size: 0.85em; }
+</style>
+</head>
+<body>
+<h1>ai-quickstart dashboard</h1>
+<p class="subtitle">Skeleton scaffold — panes coming in Wave 3.</p>
+
+<h2>Future panes</h2>
+<ul class="panes">
+  <li><strong>persona-prose</strong> — paragraph-addressable prose with pin/lock controls</li>
+  <li><strong>structured-fields</strong> — role, archetype, industry, skill_tolerance with provenance badges</li>
+  <li><strong>diff-review</strong> — non-blocking review of pending heal proposals</li>
+  <li><strong>activity-timeline</strong> — rolling event log from activity.jsonl</li>
+  <li><strong>suggestions</strong> — alternatives engine with trust badges and fit-score stars</li>
+</ul>
+
+<h2>Wiring sanity check</h2>
+<p>The fetch below proves <code>/dashboard/</code> and <code>/persona/current</code> share the same combined process.</p>
+<div class="persona-box" id="persona-box"><pre id="persona-out">loading /persona/current ...</pre></div>
+
+<footer>
+  Stdlib <code>http.server.ThreadingHTTPServer</code>, no Flask, no npm.
+  Wave 1B (combined persona_query + dashboard skeleton).
+</footer>
+
+<script>
+(function () {
+  var out = document.getElementById("persona-out");
+  fetch("/persona/current", { headers: { "Accept": "application/json" } })
+    .then(function (r) {
+      if (r.status === 404) { return { _status: 404 }; }
+      return r.json().then(function (j) { j._status = r.status; return j; });
+    })
+    .then(function (j) {
+      if (j._status === 404) {
+        out.textContent = "no persona yet — run ai-quickstart to scaffold one.";
+        out.parentNode.classList.add("error");
+        return;
+      }
+      var summary = {
+        schema_version: j.schema_version,
+        paragraphs: Array.isArray(j.paragraphs) ? j.paragraphs.length : 0,
+        stale: !!j.stale,
+        archetype: (j.structured || {}).archetype || null
+      };
+      out.textContent = JSON.stringify(summary, null, 2);
+    })
+    .catch(function (e) {
+      out.textContent = "fetch failed: " + (e && e.message ? e.message : e);
+      out.parentNode.classList.add("error");
+    });
+})();
+</script>
+</body>
+</html>
