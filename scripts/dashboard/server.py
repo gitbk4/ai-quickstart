@@ -52,8 +52,12 @@ if str(_SCRIPTS_DIR) not in sys.path:
 
 import telemetry  # type: ignore  # noqa: E402
 
-from .handlers import dashboard as dashboard_handlers  # noqa: E402
-from .handlers import persona as persona_handlers  # noqa: E402
+# Use absolute imports through the ``dashboard`` package so this file works
+# both when run as a script (``python3 scripts/dashboard/server.py``) and when
+# imported as a module (``from dashboard import server``). Relative imports
+# would break the script-form invocation.
+from dashboard.handlers import dashboard as dashboard_handlers  # type: ignore  # noqa: E402
+from dashboard.handlers import persona as persona_handlers  # type: ignore  # noqa: E402
 
 
 # ---------- public constants ----------
