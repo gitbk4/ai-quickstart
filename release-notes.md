@@ -1,4 +1,4 @@
-# v0.2.0: Persona as portable identity (Waves 1 + 2)
+# v0.2.0: Persona as portable identity 
 
 ai-quickstart's persona is no longer a private terminal-only artifact. This
 release ships the architectural foundation for personas as a queryable,
@@ -66,11 +66,6 @@ additive.
   usage and ships in a separate release.
 - The compathy `lint` xfail (`index-stale: log` on a fresh scaffold) is an
   upstream signal we left intact; it does not affect functionality.
-
-## Test stats
-
-- 729 passed + 1 xfailed in `tests/`
-- 8 new modules, 7 new test modules, 26 alternatives tags
 
 ## Compatibility
 
