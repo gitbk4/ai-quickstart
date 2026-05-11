@@ -1,0 +1,9 @@
+{
+  "name": "ai-quickstart",
+  "description": "Persona-shaped AI tooling recommendations and project scaffolding. Three-step interview turns vague AI goals into curated skills, MCP servers, and starter projects.",
+  "version": "0.3.0",
+  "author": {"name": "gitbk4"},
+  "homepage": "https://github.com/gitbk4/ai-quickstart",
+  "repository": "https://github.com/gitbk4/ai-quickstart",
+  "license": "MIT"
+}

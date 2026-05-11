@@ -1,0 +1,24 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Skill",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ -f \"$HOME/.ai-quickstart/managed-projects.json\" ] && grep -q \"\\\"$(pwd)\\\"\" \"$HOME/.ai-quickstart/managed-projects.json\" && exec python3 \"${CLAUDE_PLUGIN_ROOT}/scripts/hook_runner.py\""
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ -f \"$HOME/.ai-quickstart/managed-projects.json\" ] && grep -q \"\\\"$(pwd)\\\"\" \"$HOME/.ai-quickstart/managed-projects.json\" && exec python3 \"${CLAUDE_PLUGIN_ROOT}/scripts/hook_runner.py\""
+          }
+        ]
+      }
+    ]
+  }
+}

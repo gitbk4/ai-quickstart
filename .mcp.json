@@ -1,0 +1,8 @@
+{
+  "persona-query": {
+    "command": "python3",
+    "args": [
+      "${CLAUDE_PLUGIN_ROOT}/scripts/persona_query_stdio.py"
+    ]
+  }
+}
