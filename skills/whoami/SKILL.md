@@ -1,12 +1,12 @@
 ---
 name: whoami
-description: Use when the user asks "who am I to ai-quickstart", "what does my persona say", "give me my 30-second summary", or otherwise wants a quick read of their stored persona. Reads ~/.ai-quickstart/persona/persona.md (or .json) and prints role / archetype / industry / project_style plus 1-2 high-trust paragraphs.
+description: Use when the user asks "who am I to ai-quickstart", "what does my persona say", "give me my 30-second summary", or otherwise wants a quick read of their stored persona. Reads ~/.ai-quickstart/persona/persona.json (or .md fallback) and prints role / archetype / industry / project_style plus 1-2 high-trust paragraphs.
 allowed-tools: [Read, Bash]
 ---
 
 # /ai-quickstart:whoami
 
-A 30-second persona summary. No interview, no scaffolding - just a quick
+A 30-second persona summary. No interview, no scaffolding, just a quick
 read of what ai-quickstart already knows about the user.
 
 ## Step 1 - resolve the persona path
@@ -36,39 +36,66 @@ Then stop.
 
 ## Step 3 - read and render
 
-If `persona.json` exists, prefer it (it has structured fields). Read it
-with the Read tool. Extract:
+The `.json` and `.md` files have DIFFERENT shapes; the path you read
+depends on which file you're consuming. Get this right or you will
+silently render nothing.
 
-- `frontmatter.archetype`
-- `frontmatter.role`
-- `frontmatter.industry`
-- `frontmatter.project_style`
-- `frontmatter.generated.updated_at` and `anecdote_count`
-- The top 1-2 paragraphs by `trust.score` (descending). If two paragraphs
-  tie at the top score, prefer ones with `provenance == "pinned"` or
-  `"anecdote"`. Skip any paragraph wrapped in `<!-- lock:start -->` markers
-  in the .md - those are user-locked identity claims and should be
-  surfaced verbatim.
+### If `persona.json` exists, prefer it
 
-If only `persona.md` exists, read it. Pull the YAML frontmatter and the
-top 1-2 paragraphs (use `<!-- p:NNN -->` markers if present; otherwise
-take the first two non-empty paragraphs of the body).
+Read it with the Read tool. The structured fields live under
+`structured.X` (NOT `frontmatter.X`):
+
+- `structured.archetype`     (one of "job", "personal", "exploring")
+- `structured.role`          (string or null)
+- `structured.industry`      (string or null)
+- `structured.project_style` (string or null)
+
+Top-level metadata:
+
+- `generated_at`             (ISO 8601 timestamp, top-level field)
+- `paragraphs` length        (use as the "anecdote count" proxy)
+
+Top paragraphs: sort `paragraphs[]` by `trust_score` descending (NOT
+`trust.score`; the field is flat on each paragraph object). Pick the
+top 1-2. On ties, prefer paragraphs whose `provenance` is `"pinned"` or
+`"anecdote"`. Skip paragraphs with `locked: true` only if you would
+otherwise summarize them; user-locked identity claims should be
+surfaced verbatim when they're the top signal.
+
+### If only `persona.md` exists, fall back to it
+
+The markdown file uses a different field layout. Pull the YAML
+frontmatter and read these paths (NOT `structured.X`):
+
+- `identity.archetype`
+- `identity.role`
+- `identity.industry`
+- `preferences.project_style`
+- `generated.updated_at`
+- `generated.anecdote_count`
+
+For paragraphs, use `<!-- p:NNN -->` markers if present (the heal cycle
+emits them); otherwise take the first two non-empty paragraphs of the
+body. The `.md` has no trust scores or provenance flags inline, so
+order by file position.
 
 ## Step 4 - print the summary
 
 Render compact, chat-friendly:
 
 ```
-You are <archetype> | <role> | <industry> | project-style: <minimal|full>
-Persona last healed: <updated_at>  (<anecdote_count> anecdotes)
+You are <archetype> | <role> | <industry> | project-style: <style>
+Persona last updated: <timestamp>  (<count> paragraphs)
 
 Top signals:
-  - <trust badge> <paragraph 1 first sentence...>
-  - <trust badge> <paragraph 2 first sentence...>
+  - [trust <n>] <paragraph 1 first sentence...>
+  - [trust <n>] <paragraph 2 first sentence...>
 
 Want more? Read ~/.ai-quickstart/persona/persona.md for the full prose,
 or run `/ai-quickstart:suggest <run-id>` to use this persona to rank
 project ideas.
 ```
 
-Keep it under 12 lines. The whole point of `whoami` is fast.
+Drop the `[trust <n>]` badges when rendering from the `.md` fallback;
+the score field doesn't exist there. Keep the whole summary under 12
+lines. The whole point of `whoami` is fast.
