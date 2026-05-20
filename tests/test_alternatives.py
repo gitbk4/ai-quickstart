@@ -509,5 +509,104 @@ class StarsInlineTests(unittest.TestCase):
         self.assertEqual(alternatives.stars_inline(2.0).count("★"), 5)
 
 
+# ---------------------------------------------------------------------------
+# lane-PEXP: non-dev role expansion
+# ---------------------------------------------------------------------------
+
+
+class NonDevExpansionTests(unittest.TestCase):
+    """The v0.3.0 Cowork wedge needs alternatives for non-dev roles:
+    M&A research, financial modeling, energy project mgmt, supply chain,
+    sales outreach. Guards the curation so a non-dev persona doesn't get
+    empty suggestions."""
+
+    # Tags lane-PEXP added. If a tag is renamed, update this list AND the
+    # personas it serves.
+    NEW_TAGS = [
+        "deal-research",
+        "financial-modeling-mna",
+        "financial-modeling",
+        "revenue-reporting",
+        "project-management-energy",
+        "vendor-research-energy",
+        "supply-chain-analysis",
+        "logistics-optimization",
+        "sales-outreach-smb",
+        "customer-research",
+        "meeting-research",
+        "document-research",
+    ]
+
+    ALLOWED_KINDS = {"saas", "oss", "claude_skill", "mcp_server", "agent_platform"}
+
+    @classmethod
+    def setUpClass(cls):
+        alternatives._clear_cache_for_tests()
+        cls.alts = alternatives.load_alternatives(
+            _REPO_ROOT / "mappings" / "alternatives.yaml"
+        )
+
+    def test_new_tags_present_and_nonempty(self):
+        for tag in self.NEW_TAGS:
+            self.assertIn(tag, self.alts, f"non-dev tag {tag!r} missing")
+            kinds = self.alts[tag]
+            self.assertTrue(
+                any(kinds.get(k) for k in self.ALLOWED_KINDS),
+                f"tag {tag!r} has no entries in any kind bucket",
+            )
+
+    def test_every_url_is_syntactically_valid(self):
+        # No-network: just assert every url parses as http(s) with a netloc.
+        from urllib.parse import urlparse
+
+        bad = []
+        for tag, kinds in self.alts.items():
+            if not isinstance(kinds, dict):
+                continue
+            for kind, entries in kinds.items():
+                for entry in entries or []:
+                    url = entry.get("url", "")
+                    p = urlparse(url)
+                    if p.scheme not in ("http", "https") or not p.netloc:
+                        bad.append(f"{tag}/{kind}/{entry.get('name')}: {url!r}")
+        self.assertFalse(bad, f"malformed URLs: {bad}")
+
+    def test_no_known_dead_vendors(self):
+        # clearbit (wound into HubSpot) + thomasnet (hard bot-block, 403)
+        # were dropped during PEXP cleanup. Regression guard so they don't
+        # creep back via copy-paste.
+        blob = (_REPO_ROOT / "mappings" / "alternatives.yaml").read_text(
+            encoding="utf-8"
+        ).lower()
+        self.assertNotIn("clearbit.com", blob)
+        self.assertNotIn("thomasnet.com", blob)
+
+    def test_ma_analyst_persona_fits_deal_research(self):
+        persona = {
+            "schema_version": 1,
+            "structured": {
+                "role": "M&A analyst",
+                "archetype": "job",
+                "industry": "pharma",
+                "skill_tolerance": "low",
+                "project_style": "minimal",
+                "top_projects": [],
+            },
+            "paragraphs": [],
+            "deleted_ids": [],
+        }
+        suggestion = {
+            "name": "deal-research",
+            "category": "deal-research",
+            "archetype": "job",
+            "industry": "pharma",
+        }
+        score = alternatives.compute_fit_score(suggestion, persona)
+        self.assertGreater(
+            score, 0.5,
+            f"M&A analyst should fit deal-research > 0.5, got {score}",
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

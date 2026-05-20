@@ -585,3 +585,577 @@ alternatives:
       - name: postgres
         url: "https://github.com/modelcontextprotocol/servers/tree/main/src/postgres"
         why: "step up to Postgres when you outgrow SQLite"
+  # ------------------------------------------------------------------
+  # PEXP (v0.3.0): non-dev SaaS/OSS tag coverage for M&A, FP&A, energy
+  # project dev, supply chain, sales, and cross-cutting roles. URLs
+  # link-checked at curation time. Defers exhaustive coverage to v0.3.1+.
+  # ------------------------------------------------------------------
+  deal-research:
+    saas:
+      - name: AlphaSense
+        url: "https://www.alphasense.com"
+        why: "AI search across earnings, filings, broker research"
+      - name: Hebbia
+        url: "https://www.hebbia.com"
+        why: "agentic research over deal documents"
+      - name: Crunchbase
+        url: "https://www.crunchbase.com"
+        why: "company + funding database for targets and comps"
+    oss:
+      - name: SearXNG
+        url: "https://github.com/searxng/searxng"
+        why: "self-hostable metasearch for open-web target hunts"
+    claude_skill:
+      - name: anthropic-cookbook
+        url: "https://github.com/anthropics/anthropic-cookbook"
+        why: "research-flow recipes adaptable to deal work"
+    mcp_server:
+      - name: fetch
+        url: "https://github.com/modelcontextprotocol/servers/tree/main/src/fetch"
+        why: "pull target pages, filings, press releases into context"
+      - name: exa-search
+        url: "https://github.com/exa-labs/exa-mcp-server"
+        why: "web search MCP for opportunistic deal discovery"
+    agent_platform:
+      - name: AutoGPT
+        url: "https://github.com/Significant-Gravitas/AutoGPT"
+        why: "multi-step research agent runner"
+  financial-modeling-mna:
+    saas:
+      - name: Macabacus
+        url: "https://www.macabacus.com"
+        why: "Excel add-in for LBO, DCF, merger models"
+      - name: DealCloud
+        url: "https://www.dealcloud.com"
+        why: "deal CRM with model + pipeline tracking"
+      - name: FactSet
+        url: "https://www.factset.com"
+        why: "financial data + modeling workstation"
+    oss:
+      - name: zipline
+        url: "https://github.com/quantopian/zipline"
+        why: "Python financial backtest framework, model scaffolding"
+    claude_skill:
+      - name: anthropic-cookbook
+        url: "https://github.com/anthropics/anthropic-cookbook"
+        why: "spreadsheet + structured-output recipes"
+    mcp_server:
+      - name: filesystem
+        url: "https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem"
+        why: "read local model files and supporting docs"
+  mna-data-room:
+    saas:
+      - name: Datasite
+        url: "https://www.datasite.com"
+        why: "industry-standard virtual data room for diligence"
+      - name: Firmex
+        url: "https://www.firmex.com"
+        why: "lighter-weight VDR for mid-market deals"
+      - name: iDeals
+        url: "https://www.idealsvdr.com"
+        why: "cost-conscious VDR alternative"
+    oss:
+      - name: Nextcloud
+        url: "https://github.com/nextcloud/server"
+        why: "self-hostable share+collab for sensitive doc rooms"
+    mcp_server:
+      - name: filesystem
+        url: "https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem"
+        why: "scoped local access to exported data-room dumps"
+  due-diligence-research:
+    saas:
+      - name: AlphaSense
+        url: "https://www.alphasense.com"
+        why: "expert calls + filings search for diligence"
+      - name: CB Insights
+        url: "https://www.cbinsights.com"
+        why: "private-market research for tech and biotech targets"
+      - name: Tracxn
+        url: "https://tracxn.com"
+        why: "private-company tracker across sectors"
+    oss:
+      - name: Trafilatura
+        url: "https://github.com/adbar/trafilatura"
+        why: "Python library to extract clean text from filings pages"
+    claude_skill:
+      - name: anthropic-cookbook
+        url: "https://github.com/anthropics/anthropic-cookbook"
+        why: "summarization + extraction patterns for long docs"
+    mcp_server:
+      - name: fetch
+        url: "https://github.com/modelcontextprotocol/servers/tree/main/src/fetch"
+        why: "pull diligence sources into the agent context"
+  financial-modeling:
+    saas:
+      - name: Causal
+        url: "https://www.causal.app"
+        why: "probabilistic FP&A modeling, Excel replacement"
+      - name: Pigment
+        url: "https://www.pigment.com"
+        why: "collaborative planning + modeling platform"
+      - name: Mosaic
+        url: "https://www.mosaic.tech"
+        why: "strategic finance with AI-assisted analysis"
+      - name: Anaplan
+        url: "https://www.anaplan.com"
+        why: "enterprise-scale connected planning"
+    oss:
+      - name: SQLMesh
+        url: "https://github.com/TobikoData/sqlmesh"
+        why: "modern SQL transformation framework for finance data"
+      - name: dbt-core
+        url: "https://github.com/dbt-labs/dbt-core"
+        why: "SQL-first warehouse modeling, OSS"
+    claude_skill:
+      - name: anthropic-cookbook
+        url: "https://github.com/anthropics/anthropic-cookbook"
+        why: "spreadsheet, CSV, and tabular-reasoning recipes"
+    mcp_server:
+      - name: filesystem
+        url: "https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem"
+        why: "read local model spreadsheets and exports"
+  fpa-budgeting:
+    saas:
+      - name: Workday Adaptive Planning
+        url: "https://www.workday.com/en-us/products/adaptive-planning/overview.html"
+        why: "established cloud FP&A and budgeting suite"
+      - name: Planful
+        url: "https://planful.com"
+        why: "mid-market budgeting and consolidation"
+      - name: Vena
+        url: "https://www.venasolutions.com"
+        why: "Excel-native FP&A with workflow"
+      - name: Cube
+        url: "https://www.cubesoftware.com"
+        why: "spreadsheet-native FP&A for finance teams"
+    oss:
+      - name: Apache Superset
+        url: "https://github.com/apache/superset"
+        why: "self-hostable BI for budget variance reporting"
+    mcp_server:
+      - name: filesystem
+        url: "https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem"
+        why: "scan budget workbooks and forecast exports locally"
+  revenue-reporting:
+    saas:
+      - name: Looker Studio
+        url: "https://lookerstudio.google.com"
+        why: "free Google reporting tool for revenue dashboards"
+      - name: Mode
+        url: "https://mode.com"
+        why: "analyst notebooks plus SQL plus charts"
+      - name: Hex
+        url: "https://hex.tech"
+        why: "AI-assisted notebooks for revenue analysis"
+    oss:
+      - name: Metabase
+        url: "https://github.com/metabase/metabase"
+        why: "self-hostable BI, friendly for non-engineers"
+      - name: Apache Superset
+        url: "https://github.com/apache/superset"
+        why: "open-source enterprise BI"
+    mcp_server:
+      - name: postgres
+        url: "https://github.com/modelcontextprotocol/servers-archived/tree/main/src/postgres"
+        why: "read warehouse data into the agent"
+  bi-dashboards:
+    saas:
+      - name: Tableau
+        url: "https://help.tableau.com"
+        why: "category-defining BI for ad-hoc and curated dashboards"
+      - name: Power BI
+        url: "https://www.microsoft.com/en-us/power-platform/products/power-bi"
+        why: "Microsoft BI suite, strong in Excel-heavy orgs"
+      - name: Looker
+        url: "https://cloud.google.com/looker"
+        why: "modeled-metrics BI on top of the warehouse"
+    oss:
+      - name: Metabase
+        url: "https://github.com/metabase/metabase"
+        why: "fastest open-source BI to stand up"
+      - name: Lightdash
+        url: "https://github.com/lightdash/lightdash"
+        why: "open-source BI on top of dbt models"
+      - name: Redash
+        url: "https://github.com/getredash/redash"
+        why: "SQL-first dashboards, OSS"
+      - name: Grafana
+        url: "https://github.com/grafana/grafana"
+        why: "time-series and ops dashboards, OSS"
+    mcp_server:
+      - name: postgres
+        url: "https://github.com/modelcontextprotocol/servers-archived/tree/main/src/postgres"
+        why: "query the warehouse from an agent context"
+  solar-design:
+    saas:
+      - name: Aurora Solar
+        url: "https://www.aurorasolar.com"
+        why: "remote PV system design with shade modeling"
+      - name: HelioScope
+        url: "https://www.helioscope.com"
+        why: "PV layout + energy yield simulation"
+      - name: OpenSolar
+        url: "https://www.opensolar.com"
+        why: "free PV design and sales tool"
+    oss:
+      - name: NREL SAM
+        url: "https://github.com/NREL/SAM"
+        why: "NREL System Advisor Model for renewables economics"
+      - name: pvlib-python
+        url: "https://github.com/pvlib/pvlib-python"
+        why: "Python library for PV performance modeling"
+      - name: NREL REopt
+        url: "https://github.com/NREL/REopt"
+        why: "techno-economic optimization for renewables + storage"
+    mcp_server:
+      - name: filesystem
+        url: "https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem"
+        why: "read site surveys, irradiance data, and CAD exports"
+  project-management-energy:
+    saas:
+      - name: Procore
+        url: "https://www.procore.com"
+        why: "construction PM platform widely used in EPC"
+      - name: Autodesk Build
+        url: "https://construction.autodesk.com/products/autodesk-build/"
+        why: "Autodesk's construction project hub"
+      - name: Fieldwire
+        url: "https://www.fieldwire.com"
+        why: "field-team task and plan management"
+      - name: Buildertrend
+        url: "https://www.buildertrend.com"
+        why: "PM for small builders and residential energy work"
+    claude_skill:
+      - name: claude-code-reference
+        url: "https://github.com/anthropics/claude-code"
+        why: "patterns for project status and runbook automation"
+    mcp_server:
+      - name: filesystem
+        url: "https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem"
+        why: "ingest project trackers, drawings, and meeting notes"
+  vendor-research-energy:
+    saas:
+      - name: GreenLancer
+        url: "https://www.greenlancer.com"
+        why: "marketplace for solar engineering and permit services"
+      - name: Solargraf
+        url: "https://www.solargraf.com"
+        why: "solar proposal + permit workflow"
+    mcp_server:
+      - name: fetch
+        url: "https://github.com/modelcontextprotocol/servers/tree/main/src/fetch"
+        why: "pull spec sheets and supplier pages on demand"
+      - name: exa-search
+        url: "https://github.com/exa-labs/exa-mcp-server"
+        why: "web search for niche equipment vendors"
+  construction-management:
+    saas:
+      - name: Procore
+        url: "https://www.procore.com"
+        why: "construction management for mid to large projects"
+      - name: Autodesk Build
+        url: "https://construction.autodesk.com/products/autodesk-build/"
+        why: "Autodesk's unified construction platform"
+      - name: Fieldwire
+        url: "https://www.fieldwire.com"
+        why: "field-first construction task management"
+    claude_skill:
+      - name: claude-code-reference
+        url: "https://github.com/anthropics/claude-code"
+        why: "automate punch-list and submittal triage flows"
+    mcp_server:
+      - name: filesystem
+        url: "https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem"
+        why: "scan local drawings, RFIs, and submittals"
+  supply-chain-analysis:
+    saas:
+      - name: Power BI
+        url: "https://www.microsoft.com/en-us/power-platform/products/power-bi"
+        why: "Microsoft BI suite, dominant in supply chain orgs"
+      - name: Tableau
+        url: "https://help.tableau.com"
+        why: "interactive dashboards for inventory and flow analysis"
+      - name: Kinaxis
+        url: "https://kinaxis.com"
+        why: "supply chain planning and concurrent scenarios"
+      - name: o9 Solutions
+        url: "https://www.o9solutions.com"
+        why: "integrated planning platform for demand and supply"
+    oss:
+      - name: Apache Superset
+        url: "https://github.com/apache/superset"
+        why: "self-hostable BI for supply-chain analytics"
+      - name: Metabase
+        url: "https://github.com/metabase/metabase"
+        why: "non-engineer-friendly self-hosted BI"
+    claude_skill:
+      - name: anthropic-cookbook
+        url: "https://github.com/anthropics/anthropic-cookbook"
+        why: "tabular-reasoning and CSV recipes"
+    mcp_server:
+      - name: postgres
+        url: "https://github.com/modelcontextprotocol/servers-archived/tree/main/src/postgres"
+        why: "query the ERP or warehouse replica from an agent"
+  logistics-optimization:
+    saas:
+      - name: project44
+        url: "https://project44.com"
+        why: "multimodal shipment visibility platform"
+      - name: Flexport
+        url: "https://www.flexport.com"
+        why: "freight forwarder with software-first ops"
+      - name: Coupa
+        url: "https://www.coupa.com"
+        why: "spend management and supply-chain planning"
+    oss:
+      - name: OR-Tools
+        url: "https://developers.google.com/optimization"
+        why: "Google's routing and scheduling solvers"
+      - name: Pyomo
+        url: "https://github.com/Pyomo/pyomo"
+        why: "Python optimization modeling for MILP and beyond"
+      - name: Timefold Solver
+        url: "https://github.com/TimefoldAI/timefold-solver"
+        why: "open-source constraint solver for routing and scheduling"
+    claude_skill:
+      - name: anthropic-cookbook
+        url: "https://github.com/anthropics/anthropic-cookbook"
+        why: "code-gen recipes for optimization formulations"
+  contract-review:
+    saas:
+      - name: Ironclad
+        url: "https://ironcladapp.com"
+        why: "CLM platform with AI-assisted contract review"
+      - name: LinkSquares
+        url: "https://linksquares.com"
+        why: "AI contract analytics and post-signature ops"
+      - name: Spellbook
+        url: "https://www.spellbook.legal"
+        why: "AI copilot for contract drafting in Word"
+      - name: Evisort
+        url: "https://www.evisort.com"
+        why: "contract intelligence and metadata extraction"
+      - name: DocuSign CLM
+        url: "https://www.docusign.com/products/clm"
+        why: "CLM bundled with the dominant e-signature platform"
+    oss:
+      - name: Nextcloud
+        url: "https://github.com/nextcloud/server"
+        why: "self-hostable storage and review workflows"
+    claude_skill:
+      - name: anthropic-cookbook
+        url: "https://github.com/anthropics/anthropic-cookbook"
+        why: "long-document Q&A and clause-extraction recipes"
+    mcp_server:
+      - name: filesystem
+        url: "https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem"
+        why: "scan local contract folders into context"
+  expense-procurement:
+    saas:
+      - name: Ramp
+        url: "https://ramp.com"
+        why: "corporate cards plus AP, AI-driven spend insights"
+      - name: Brex
+        url: "https://www.brex.com"
+        why: "spend management for startups and mid-market"
+      - name: Coupa
+        url: "https://www.coupa.com"
+        why: "enterprise spend, procurement, and supplier mgmt"
+      - name: Navan
+        url: "https://navan.com"
+        why: "travel plus expense in one platform"
+    oss:
+      - name: Odoo
+        url: "https://github.com/odoo/odoo"
+        why: "open-source ERP with purchasing and expense modules"
+    claude_skill:
+      - name: anthropic-cookbook
+        url: "https://github.com/anthropics/anthropic-cookbook"
+        why: "receipt and invoice extraction patterns"
+    mcp_server:
+      - name: filesystem
+        url: "https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem"
+        why: "ingest exported expense CSVs and receipt scans"
+  sales-outreach-smb:
+    saas:
+      - name: HubSpot
+        url: "https://www.hubspot.com"
+        why: "all-in-one CRM plus sequences for SMB sales"
+      - name: Apollo
+        url: "https://www.apollo.io"
+        why: "B2B contact database plus AI sequences"
+      - name: Outreach
+        url: "https://www.outreach.io"
+        why: "sales engagement platform, established"
+      - name: Clay
+        url: "https://www.clay.com"
+        why: "AI-driven prospect enrichment and outreach"
+    oss:
+      - name: Mautic
+        url: "https://github.com/mautic/mautic"
+        why: "open-source marketing automation"
+      - name: SuiteCRM
+        url: "https://github.com/salesagility/SuiteCRM"
+        why: "self-hostable enterprise-style CRM"
+      - name: EspoCRM
+        url: "https://github.com/espocrm/espocrm"
+        why: "lightweight self-hosted CRM"
+    claude_skill:
+      - name: anthropic-cookbook
+        url: "https://github.com/anthropics/anthropic-cookbook"
+        why: "personalized-outreach drafting patterns"
+    mcp_server:
+      - name: gmail
+        url: "https://github.com/GongRzhe/Gmail-MCP-Server"
+        why: "send and triage outreach via Gmail MCP"
+      - name: hubspot
+        url: "https://github.com/HubSpot/mcp-server"
+        why: "official HubSpot MCP server for CRM access"
+  customer-research:
+    saas:
+      - name: Crunchbase
+        url: "https://www.crunchbase.com"
+        why: "company profiles, funding, and people data"
+      - name: ZoomInfo
+        url: "https://www.zoominfo.com"
+        why: "B2B contact and intent data at scale"
+      - name: LinkedIn Sales Navigator
+        url: "https://business.linkedin.com/sales-solutions/sales-navigator"
+        why: "people-level prospecting on LinkedIn"
+    oss:
+      - name: SearXNG
+        url: "https://github.com/searxng/searxng"
+        why: "self-hosted metasearch for open-web account research"
+    claude_skill:
+      - name: anthropic-cookbook
+        url: "https://github.com/anthropics/anthropic-cookbook"
+        why: "account-research summarization recipes"
+    mcp_server:
+      - name: exa-search
+        url: "https://github.com/exa-labs/exa-mcp-server"
+        why: "web search MCP for ad-hoc account digs"
+      - name: fetch
+        url: "https://github.com/modelcontextprotocol/servers/tree/main/src/fetch"
+        why: "pull individual prospect pages into context"
+  crm-smb:
+    saas:
+      - name: HubSpot
+        url: "https://www.hubspot.com"
+        why: "free-to-start CRM with strong SMB ergonomics"
+      - name: Pipedrive
+        url: "https://www.pipedrive.com"
+        why: "pipeline-first CRM for small sales teams"
+      - name: Salesforce
+        url: "https://www.salesforce.com"
+        why: "the enterprise CRM, also has SMB editions"
+    oss:
+      - name: Twenty
+        url: "https://github.com/twentyhq/twenty"
+        why: "modern open-source CRM, OSS Salesforce alt"
+      - name: SuiteCRM
+        url: "https://github.com/salesagility/SuiteCRM"
+        why: "open-source CRM with deep customization"
+      - name: EspoCRM
+        url: "https://github.com/espocrm/espocrm"
+        why: "lightweight self-hosted CRM"
+    mcp_server:
+      - name: hubspot
+        url: "https://github.com/HubSpot/mcp-server"
+        why: "official HubSpot MCP for CRM read and write"
+  pitch-deck:
+    saas:
+      - name: Beautiful.ai
+        url: "https://www.beautiful.ai"
+        why: "AI-assisted deck builder with smart layouts"
+      - name: Slidesgo
+        url: "https://slidesgo.com"
+        why: "free template library for Google Slides and PowerPoint"
+    oss:
+      - name: Marp
+        url: "https://github.com/marp-team/marp"
+        why: "Markdown-driven slide decks, version-controllable"
+      - name: reveal.js
+        url: "https://github.com/hakimel/reveal.js"
+        why: "HTML presentation framework, scriptable"
+    claude_skill:
+      - name: anthropic-cookbook
+        url: "https://github.com/anthropics/anthropic-cookbook"
+        why: "structured-output recipes for outline-to-deck flows"
+    mcp_server:
+      - name: filesystem
+        url: "https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem"
+        why: "read source materials and write deck Markdown locally"
+  meeting-research:
+    saas:
+      - name: Otter.ai
+        url: "https://otter.ai"
+        why: "AI meeting notes and live transcription"
+      - name: Fireflies
+        url: "https://fireflies.ai"
+        why: "meeting recorder with searchable summaries"
+      - name: tl;dv
+        url: "https://tldv.io"
+        why: "Zoom and Meet recorder with AI highlights"
+      - name: Fathom
+        url: "https://fathom.video"
+        why: "free AI meeting notetaker for Zoom and Meet"
+    oss:
+      - name: whisper.cpp
+        url: "https://github.com/ggerganov/whisper.cpp"
+        why: "local C++ port of Whisper for transcription"
+      - name: faster-whisper
+        url: "https://github.com/SYSTRAN/faster-whisper"
+        why: "faster CTranslate2 port of Whisper"
+      - name: Whisper
+        url: "https://github.com/openai/whisper"
+        why: "the original OpenAI ASR model"
+    claude_skill:
+      - name: anthropic-cookbook
+        url: "https://github.com/anthropics/anthropic-cookbook"
+        why: "transcript summarization and action-item recipes"
+    mcp_server:
+      - name: filesystem
+        url: "https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem"
+        why: "ingest local recordings and transcript files"
+  document-research:
+    saas:
+      - name: Glean
+        url: "https://www.glean.com"
+        why: "enterprise search and AI Q&A across SaaS"
+      - name: Notion AI
+        url: "https://www.notion.com/product/ai"
+        why: "Q&A and writing assistance inside Notion"
+    oss:
+      - name: Open WebUI
+        url: "https://github.com/open-webui/open-webui"
+        why: "self-hosted chat plus RAG over your docs"
+    claude_skill:
+      - name: anthropic-cookbook
+        url: "https://github.com/anthropics/anthropic-cookbook"
+        why: "RAG and document-Q&A recipes"
+    mcp_server:
+      - name: gdrive
+        url: "https://github.com/modelcontextprotocol/servers-archived/tree/main/src/gdrive"
+        why: "Google Drive as MCP source for doc research"
+      - name: filesystem
+        url: "https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem"
+        why: "local doc folders into the agent context"
+  note-taking-research:
+    saas:
+      - name: Notion
+        url: "https://www.notion.com"
+        why: "docs plus DB plus AI in one workspace"
+      - name: Obsidian
+        url: "https://obsidian.md"
+        why: "local-first markdown notes with rich plugin ecosystem"
+    oss:
+      - name: Logseq
+        url: "https://github.com/logseq/logseq"
+        why: "open-source outliner-style PKM, local files"
+      - name: Trilium
+        url: "https://github.com/zadam/trilium"
+        why: "self-hosted hierarchical notes app"
+    mcp_server:
+      - name: filesystem
+        url: "https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem"
+        why: "read and write Markdown notes locally"
